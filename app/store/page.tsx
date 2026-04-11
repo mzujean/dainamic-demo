@@ -1,21 +1,30 @@
-"use client";
-import { useState } from "react";
-import { useStore } from "@/store/useStore";
+﻿"use client";
+import { useState, useEffect } from "react";
 import Card from "@/components/Card";
-import { ShoppingCart, Plus, Minus, X, Check } from "lucide-react";
+import { ShoppingCart, Plus, Minus } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 type CartItem = { productId: string; name: string; size: string; qty: number; price: number };
-
 const DELIVERY = { pudo: { label: "PUDO locker", desc: "Pick up at nearest locker", cost: 60 }, door: { label: "Door-to-door", desc: "The Courier Guy", cost: 100 } };
 
 export default function StorePage() {
-  const { products } = useStore();
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [delivery, setDelivery] = useState<"pudo" | "door">("pudo");
   const [view, setView] = useState<"shop" | "checkout" | "done">("shop");
   const [filter, setFilter] = useState<"all" | "single" | "bundle">("all");
 
-  const addToCart = (p: typeof products[0], size: string) => {
+  useEffect(() => {
+    async function fetchProducts() {
+      const { data } = await supabase.from("products").select("*").eq("available", true).order("category").order("price");
+      if (data) setProducts(data);
+      setLoading(false);
+    }
+    fetchProducts();
+  }, []);
+
+  const addToCart = (p: any, size: string) => {
     setCart(prev => {
       const exists = prev.find(i => i.productId === p.id && i.size === size);
       if (exists) return prev.map(i => i.productId === p.id && i.size === size ? { ...i, qty: i.qty + 1 } : i);
@@ -31,20 +40,24 @@ export default function StorePage() {
   const orderRef = `DHR-${String(Math.floor(Math.random() * 9000) + 1000)}`;
   const filtered = products.filter(p => filter === "all" || p.category === filter);
 
+  if (loading) return (
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: "60px 0", textAlign: "center" }}>
+      <div style={{ fontSize: 13, color: "var(--text-tertiary)" }}>Loading products...</div>
+    </div>
+  );
+
   if (view === "done") return (
     <div style={{ maxWidth: 560, margin: "60px auto" }} className="fade-up">
       <Card padding="36px" style={{ textAlign: "center" }}>
-        <div style={{ width: 52, height: 52, borderRadius: "50%", background: "var(--accent-teal-dim)", border: "0.5px solid rgba(45,212,191,0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-          <Check size={22} color="var(--accent-teal)" />
-        </div>
+        <div style={{ width: 52, height: 52, borderRadius: "50%", background: "var(--accent-teal-dim)", border: "0.5px solid rgba(45,212,191,0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 22 }}>✓</div>
         <h2 style={{ fontSize: 18, fontWeight: 400, marginBottom: 8 }}>Order placed</h2>
         <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 20, lineHeight: 1.7 }}>
-          Transfer R{(cartTotal + DELIVERY[delivery].cost).toLocaleString()} to the account below using reference <span style={{ fontFamily: "var(--font-mono)", color: "var(--accent-purple)" }}>{orderRef}</span>
+          Transfer <strong>R{(cartTotal + DELIVERY[delivery].cost).toLocaleString()}</strong> using reference <span style={{ fontFamily: "var(--font-mono)", color: "var(--accent-purple)" }}>{orderRef}</span>
         </p>
         <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 16, textAlign: "left", marginBottom: 20, fontSize: 13 }}>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "0.5px solid var(--glass-border)" }}><span style={{ color: "var(--text-tertiary)" }}>Bank</span><span>FNB</span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "0.5px solid var(--glass-border)" }}><span style={{ color: "var(--text-tertiary)" }}>Account</span><span style={{ fontFamily: "var(--font-mono)" }}>Dainamic Hair</span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "0.5px solid var(--glass-border)" }}><span style={{ color: "var(--text-tertiary)" }}>Acc no.</span><span style={{ fontFamily: "var(--font-mono)" }}>62XXXXXXXX</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "0.5px solid var(--glass-border)" }}><span style={{ color: "var(--text-tertiary)" }}>Account name</span><span>Dainamic Hair</span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "0.5px solid var(--glass-border)" }}><span style={{ color: "var(--text-tertiary)" }}>Account no.</span><span style={{ fontFamily: "var(--font-mono)" }}>62XXXXXXXX</span></div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0" }}><span style={{ color: "var(--text-tertiary)" }}>Reference</span><span style={{ fontFamily: "var(--font-mono)", color: "var(--accent-purple)" }}>{orderRef}</span></div>
         </div>
         <button className="btn btn-ghost" style={{ width: "100%" }} onClick={() => { setCart([]); setView("shop"); }}>Back to shop</button>
@@ -66,9 +79,9 @@ export default function StorePage() {
               <div style={{ fontSize: 13, fontWeight: 500 }}>{item.name}</div>
               <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{item.size}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                <button onClick={() => changeQty(item.productId, item.size, -1)} style={{ width: 20, height: 20, borderRadius: 4, border: "0.5px solid var(--glass-border)", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-primary)" }}><Minus size={10} /></button>
+                <button onClick={() => changeQty(item.productId, item.size, -1)} style={{ width: 20, height: 20, borderRadius: 4, border: "0.5px solid var(--glass-border)", background: "transparent", cursor: "pointer", color: "var(--text-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}><Minus size={10} /></button>
                 <span style={{ fontSize: 12, minWidth: 16, textAlign: "center" }}>{item.qty}</span>
-                <button onClick={() => changeQty(item.productId, item.size, 1)} style={{ width: 20, height: 20, borderRadius: 4, border: "0.5px solid var(--glass-border)", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-primary)" }}><Plus size={10} /></button>
+                <button onClick={() => changeQty(item.productId, item.size, 1)} style={{ width: 20, height: 20, borderRadius: 4, border: "0.5px solid var(--glass-border)", background: "transparent", cursor: "pointer", color: "var(--text-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}><Plus size={10} /></button>
               </div>
             </div>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}>R{(item.price * item.qty).toLocaleString()}</span>
@@ -94,8 +107,8 @@ export default function StorePage() {
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 500 }}><span>Total</span><span style={{ fontFamily: "var(--font-mono)", color: "var(--accent-purple)" }}>R{(cartTotal + DELIVERY[delivery].cost).toLocaleString()}</span></div>
       </Card>
       <Card padding="20px" style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 4 }}>Payment — EFT (no card needed)</div>
-        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 14 }}>Bank details and unique reference provided after placing order</div>
+        <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 4 }}>Payment — EFT</div>
+        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 14 }}>No card needed. Bank details provided after placing order.</div>
         <button className="btn btn-primary" style={{ width: "100%", padding: 12 }} onClick={() => setView("done")}>Place order — R{(cartTotal + DELIVERY[delivery].cost).toLocaleString()}</button>
       </Card>
     </div>
@@ -114,7 +127,6 @@ export default function StorePage() {
           </button>
         )}
       </div>
-
       <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
         {(["all", "single", "bundle"] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{ padding: "6px 14px", borderRadius: 999, border: `0.5px solid ${filter === f ? "var(--glass-border-strong)" : "var(--glass-border)"}`, background: filter === f ? "var(--glass-white-hover)" : "transparent", color: filter === f ? "var(--text-primary)" : "var(--text-tertiary)", fontSize: 12, cursor: "pointer", textTransform: "capitalize" }}>
@@ -122,30 +134,27 @@ export default function StorePage() {
           </button>
         ))}
       </div>
-
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
-        {filtered.map(p => (
-          <Card key={p.id} padding="16px" style={{ cursor: "pointer" }}>
+        {filtered.filter(p => p.price > 0).map(p => (
+          <Card key={p.id} padding="16px">
             <div style={{ height: 80, borderRadius: 8, background: "var(--glass-white)", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
               <div style={{ fontSize: 28 }}>✦</div>
             </div>
             <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>{p.name}</div>
-            <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 10 }}>
-              {p.category === "bundle" ? "Bundle" : p.sizes.join(" / ")}
-            </div>
+            <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 10 }}>{p.sizes?.join(" / ")}</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, color: "var(--accent-purple)" }}>R{p.price}</span>
               <div style={{ display: "flex", gap: 6 }}>
-                {p.sizes.map(s => (
+                {p.sizes?.map((s: string) => (
                   <button key={s} className="btn btn-ghost" style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => addToCart(p, s)}>
                     {p.sizes.length > 1 ? s : "Add"}
                   </button>
                 ))}
               </div>
             </div>
-            <div style={{ marginTop: 8, fontSize: 10, color: p.stock <= p.lowStockThreshold ? "var(--accent-amber)" : "var(--text-tertiary)" }}>
-              {p.stock} in stock {p.stock <= p.lowStockThreshold ? "— low" : ""}
-            </div>
+            {p.stock <= p.low_stock_threshold && p.stock > 0 && (
+              <div style={{ marginTop: 8, fontSize: 10, color: "var(--accent-amber)" }}>{p.stock} left — low stock</div>
+            )}
           </Card>
         ))}
       </div>
