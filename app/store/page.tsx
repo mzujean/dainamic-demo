@@ -1,4 +1,5 @@
 ﻿"use client";
+export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
 import Card from "@/components/Card";
 import { ShoppingCart, Plus, Minus } from "lucide-react";
@@ -161,4 +162,5 @@ export default function StorePage() {
     </div>
   );
 }
+
 
