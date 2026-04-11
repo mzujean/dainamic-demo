@@ -48,25 +48,28 @@ export default function AnalyticsClient({ income, expenses, inventory }: { incom
     }));
   }, [income, expenses]);
 
-  // Expenses by category
+  // Expenses by category — normalise casing
   const expensesByCategory = useMemo(() => {
     const map: Record<string, number> = {};
     expenses.forEach(r => {
-      const cat = r.category || "Other";
+      const cat = r.category ? r.category.trim().toLowerCase().replace(/\b\w/g, (c: string) => c.toUpperCase()) : "Other";
       map[cat] = (map[cat] || 0) + Number(r.amount);
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [expenses]);
 
-  // Facebook Ads anomaly
+  // Facebook Ads anomaly — check description column
   const fbAnomalies = useMemo(() =>
-    expenses.filter(r => r.vendor?.toLowerCase().includes("facebook") && r.notes?.toLowerCase().includes("no marketing")),
+    expenses.filter(r =>
+      r.vendor?.toLowerCase().includes("facebook") &&
+      r.description?.toLowerCase().includes("no marketing")
+    ),
   [expenses]);
   const fbAnomalyTotal = fbAnomalies.reduce((s, r) => s + Number(r.amount), 0);
 
   // Top inventory items
   const topInventory = useMemo(() =>
-    [...inventory].sort((a, b) => Number(b.total_cost) - Number(a.total_cost)).slice(0, 5),
+    [...inventory].filter(r => r.total_cost).sort((a, b) => Number(b.total_cost) - Number(a.total_cost)).slice(0, 5),
   [inventory]);
 
   return (
@@ -76,7 +79,6 @@ export default function AnalyticsClient({ income, expenses, inventory }: { incom
         <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 2 }}>Live data from your Supabase database</p>
       </div>
 
-      {/* Stat cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
         <StatCard label="Total Revenue" value={`R${totalIncome.toLocaleString()}`} change="All sales" trend="up" accent="var(--accent-purple)" glow="purple" />
         <StatCard label="Net Profit" value={`R${netProfit.toLocaleString()}`} change={netProfit > 0 ? "Profitable" : "Loss"} trend={netProfit > 0 ? "up" : "down"} accent="var(--accent-teal)" glow="teal" />
@@ -84,7 +86,6 @@ export default function AnalyticsClient({ income, expenses, inventory }: { incom
         <StatCard label="Inventory Cost" value={`R${totalInventoryCost.toLocaleString()}`} change={`${inventory.length} items`} trend="up" accent="var(--accent-amber)" />
       </div>
 
-      {/* Revenue chart */}
       <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 12, marginBottom: 12 }}>
         <Card padding="20px">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -115,7 +116,6 @@ export default function AnalyticsClient({ income, expenses, inventory }: { incom
           </ResponsiveContainer>
         </Card>
 
-        {/* Expenses by category */}
         <Card padding="20px">
           <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 16 }}>Expenses by category</div>
           <ResponsiveContainer width="100%" height={120}>
@@ -135,7 +135,6 @@ export default function AnalyticsClient({ income, expenses, inventory }: { incom
         </Card>
       </div>
 
-      {/* Top inventory + Facebook anomaly */}
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, marginBottom: 12 }}>
         <Card padding="20px">
           <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 14 }}>Top inventory items by cost</div>
@@ -154,7 +153,7 @@ export default function AnalyticsClient({ income, expenses, inventory }: { incom
           {fbAnomalies.length > 0 ? (
             <>
               <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 12, lineHeight: 1.6 }}>
-                {fbAnomalies.length} charges detected when no ads were active
+                {fbAnomalies.length} charges when no ads were active
               </div>
               {fbAnomalies.map((r, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, padding: "6px 0", borderBottom: "0.5px solid var(--glass-border)" }}>
@@ -163,7 +162,7 @@ export default function AnalyticsClient({ income, expenses, inventory }: { incom
                 </div>
               ))}
               <div style={{ marginTop: 12, padding: "10px", background: "rgba(251,146,60,0.1)", borderRadius: 8, fontSize: 11, color: "#fb923c", lineHeight: 1.6 }}>
-                Total unexpected charges: R{fbAnomalyTotal.toFixed(2)} — consider disputing with Meta
+                Total unexpected: R{fbAnomalyTotal.toFixed(2)} — consider disputing with Meta
               </div>
             </>
           ) : (
@@ -172,7 +171,6 @@ export default function AnalyticsClient({ income, expenses, inventory }: { incom
         </Card>
       </div>
 
-      {/* Profit summary */}
       <Card padding="20px">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)" }}>Business health summary</span>
