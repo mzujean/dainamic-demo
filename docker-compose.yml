@@ -1,0 +1,13 @@
+﻿version: '3.8'
+services:
+  dainamic:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=development
