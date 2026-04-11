@@ -17,7 +17,7 @@ export default function StorePage() {
 
   useEffect(() => {
     async function fetchProducts() {
-      const { data } = await supabase.from("products").select("*").eq("available", true).order("category").order("price");
+      const { data } = await supabase.from("products").select("*").order("category").order("price");
       if (data) setProducts(data);
       setLoading(false);
     }
@@ -161,3 +161,4 @@ export default function StorePage() {
     </div>
   );
 }
+
