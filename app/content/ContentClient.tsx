@@ -35,7 +35,7 @@ const STATUS_COLORS: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-800',
 }
 
-export default function ContentClient() {
+export default function ContentClient({ initialQueue = [] }: { initialQueue?: any[] }) {
   const [activeTab, setActiveTab] = useState<'clips' | 'create' | 'queue'>('clips')
   const [clips, setClips] = useState<Clip[]>([])
   const [loadingClips, setLoadingClips] = useState(true)
@@ -375,3 +375,4 @@ export default function ContentClient() {
     </div>
   )
 }
+
