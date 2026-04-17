@@ -33,10 +33,10 @@ const MILESTONES = [
   { id: "m1", title: "App running in Docker",       desc: "Local dev environment live",              done: true,  impact: "Foundation built" },
   { id: "m2", title: "Supabase connected",          desc: "Real data saving to cloud",               done: true,  impact: "Data persists permanently" },
   { id: "m3", title: "Real products loaded",        desc: "All 13 products with correct prices",     done: true,  impact: "Store is accurate" },
-  { id: "m4", title: "Agent OS foundation",         desc: "Soul, user, heartbeat ó agents have a brain", done: true, impact: "AI can now operate with context" },
-  { id: "m5", title: "Knowledge wizard live",       desc: "Dynamic gap system ó agents ask when stuck", done: true, impact: "No more generic AI responses" },
+  { id: "m4", title: "Agent OS foundation",         desc: "Soul, user, heartbeat ‚Äî agents have a brain", done: true, impact: "AI can now operate with context" },
+  { id: "m5", title: "Knowledge wizard live",       desc: "Dynamic gap system ‚Äî agents ask when stuck", done: true, impact: "No more generic AI responses" },
   { id: "m6", title: "Agent preferences in settings", desc: "Edit & reset all agent answers anytime", done: true, impact: "Full owner control" },
-  { id: "m7", title: "Inventory agent live",        desc: "First real working agent ó stock alerts",  done: false, impact: "Agents start doing real work", next: true },
+  { id: "m7", title: "Inventory agent live",        desc: "First real working agent ‚Äî stock alerts",  done: false, impact: "Agents start doing real work", next: true },
   { id: "m8", title: "WhatsApp bot active",         desc: "Customers can order via WhatsApp",         done: false, impact: "Low-data customers can order" },
   { id: "m9", title: "Content engine live",         desc: "30 posts/day auto-generated",              done: false, impact: "Consistent social presence" },
   { id: "m10", title: "First 10 orders",            desc: "Real orders through the system",           done: false, impact: "Revenue flowing through app" },
@@ -45,48 +45,48 @@ const MILESTONES = [
 ];
 
 const SESSION_6_GOALS = [
-  { id: "g1", text: "Build inventory agent ó first real working agent", done: false, category: "Agent" },
+  { id: "g1", text: "Build inventory agent ‚Äî first real working agent", done: false, category: "Agent" },
   { id: "g2", text: "Inventory agent reads live stock from Supabase",   done: false, category: "Agent" },
   { id: "g3", text: "Low stock alerts surface in app with approval UI", done: false, category: "Agent" },
   { id: "g4", text: "Agent writes memory after each run",               done: false, category: "Agent" },
 ];
 
 const STATIC_BUILD_LOG: BuildItem[] = [
-  // Session 6 ó today
+  // Session 6 ‚Äî today
   { feature: "Agent OS Foundation",         status: "done",        note: "soul.md, user.md, heartbeat.md stored in Supabase agent_context table. Every agent reads these before every task.", session: "S6", category: "Agent OS" },
   { feature: "Supabase Agent Schema",       status: "done",        note: "6 tables created: agent_context, agent_memory, knowledge_gaps, agent_heartbeat_log, video_assets, content_scripts.", session: "S6", category: "Agent OS" },
-  { feature: "Knowledge Wizard Modal",      status: "done",        note: "Slides up from bottom on app open. Asks one question at a time. Saves permanently ó never asks again.", session: "S6", category: "Agent OS" },
+  { feature: "Knowledge Wizard Modal",      status: "done",        note: "Slides up from bottom on app open. Asks one question at a time. Saves permanently ‚Äî never asks again.", session: "S6", category: "Agent OS" },
   { feature: "Dynamic Gap System",          status: "done",        note: "Agents register gaps when they cant proceed. Wizard surfaces them. Owner answers once, agent remembers forever.", session: "S6", category: "Agent OS" },
-  { feature: "Agent Preferences ó Settings", status: "done",       note: "Full preferences editor in /settings. Edit any answer, reset to re-trigger wizard. Other option on all selects.", session: "S6", category: "Agent OS" },
-  { feature: "Heartbeat System",            status: "done",        note: "Fires on app open. Zero token cost ó DB reads only. No scheduled timer yet ó dynamic triggers only.", session: "S6", category: "Agent OS" },
+  { feature: "Agent Preferences ‚Äî Settings", status: "done",       note: "Full preferences editor in /settings. Edit any answer, reset to re-trigger wizard. Other option on all selects.", session: "S6", category: "Agent OS" },
+  { feature: "Heartbeat System",            status: "done",        note: "Fires on app open. Zero token cost ‚Äî DB reads only. No scheduled timer yet ‚Äî dynamic triggers only.", session: "S6", category: "Agent OS" },
   { feature: "Video Pipeline Tables",       status: "done",        note: "video_assets + content_scripts tables ready. Gemini analysis route built. Waits for video upload UI.", session: "S6", category: "Video" },
   { feature: "AgentOSProvider",             status: "done",        note: "Wraps root layout. Runs heartbeat on open. Shows wizard when gaps exist.", session: "S6", category: "Agent OS" },
-  { feature: "Owner Profile ó user.md",     status: "done",        note: "Dai Jean Mzumara. 8am-6pm. 7 day follow-up. Facebook primary. Warm & professional tone. Always ask for reorders.", session: "S6", category: "Agent OS" },
+  { feature: "Owner Profile ‚Äî user.md",     status: "done",        note: "Dai Jean Mzumara. 8am-6pm. 7 day follow-up. Facebook primary. Warm & professional tone. Always ask for reorders.", session: "S6", category: "Agent OS" },
   // Previous sessions
-  { feature: "WhatsApp Number Switch",      status: "done",        note: "Switched from Business to personal ó bot unblocked.", session: "S4", category: "WhatsApp" },
-  { feature: "WhatsApp Bot",                status: "done",        note: "QR scanned with personal number ó bot live.", session: "S3-S4", category: "WhatsApp" },
+  { feature: "WhatsApp Number Switch",      status: "done",        note: "Switched from Business to personal ‚Äî bot unblocked.", session: "S4", category: "WhatsApp" },
+  { feature: "WhatsApp Bot",                status: "done",        note: "QR scanned with personal number ‚Äî bot live.", session: "S3-S4", category: "WhatsApp" },
   { feature: "Content Scheduler Page",      status: "done",        note: "app/content/page.tsx + ContentClient + API route.", session: "S3", category: "Content" },
   { feature: "Facebook Auto-Posting",       status: "done",        note: "Direct Graph API posting live. Page ID + tokens set.", session: "S4", category: "Content" },
   { feature: "Meta Developer App",          status: "done",        note: "App ID: 1627204968400712. Facebook posting via API.", session: "S3", category: "Content" },
   { feature: "Docker Stack",                status: "done",        note: "docker-compose.yml updated. whatsapp-bot service added.", session: "S3", category: "Infrastructure" },
   { feature: "Supabase content_queue",      status: "done",        note: "Table created and connected to content scheduler.", session: "S3", category: "Infrastructure" },
-  { feature: "Google Drive Clips",          status: "pending",     note: "Deferred ó video pipeline approach changed. Now uses Supabase storage + Gemini.", session: "S4", category: "Video" },
+  { feature: "Google Drive Clips",          status: "pending",     note: "Deferred ‚Äî video pipeline approach changed. Now uses Supabase storage + Gemini.", session: "S4", category: "Video" },
   { feature: "Test Content Page",           status: "pending",     note: "Topic to Groq caption to save to queue to verify in Supabase.", session: "S4", category: "Content" },
 ];
 
 const NEXT_UP = [
-  { title: "Inventory Agent",    desc: "First real agent ó reads stock, surfaces low alerts, waits for approval", priority: "Tonight" },
-  { title: "Client Agent",       desc: "Follow-up reminders via WhatsApp ó 7 day timing, warm tone", priority: "This week" },
-  { title: "Video Upload UI",    desc: "Upload video ó Gemini reads it ó transcript stored ó script paired", priority: "This week" },
+  { title: "Inventory Agent",    desc: "First real agent ‚Äî reads stock, surfaces low alerts, waits for approval", priority: "Tonight" },
+  { title: "Client Agent",       desc: "Follow-up reminders via WhatsApp ‚Äî 7 day timing, warm tone", priority: "This week" },
+  { title: "Video Upload UI",    desc: "Upload video ‚Äî Gemini reads it ‚Äî transcript stored ‚Äî script paired", priority: "This week" },
   { title: "Content Agent",      desc: "Schedule 30 posts/day using scripts + video highlights", priority: "Next week" },
-  { title: "Facebook Upload Fix", desc: "Video posting to Facebook still broken ó revisit after inventory agent", priority: "Next week" },
+  { title: "Facebook Upload Fix", desc: "Video posting to Facebook still broken ‚Äî revisit after inventory agent", priority: "Next week" },
 ];
 
 const REMINDERS = [
-  { icon: "??", label: "Meta Access Token",   note: "Expires ~1hr. Refresh at developers.facebook.com/tools/explorer", urgent: true },
-  { icon: "??", label: "Agent OS is live",     note: "soul.md, user.md, heartbeat.md in Supabase. All agents read these first.", urgent: false },
-  { icon: "??", label: "WhatsApp Bot Files",   note: "D:\\Docker projects\\dainamic\\whatsapp-bot\\", urgent: false },
-  { icon: "??", label: "C Drive Space",        note: "Use npm run dev instead of Docker for main app", urgent: false },
+  { icon: "‚ö†Ô∏è", label: "Meta Access Token",   note: "Expires ~1hr. Refresh at developers.facebook.com/tools/explorer", urgent: true },
+  { icon: "üß†", label: "Agent OS is live",     note: "soul.md, user.md, heartbeat.md in Supabase. All agents read these first.", urgent: false },
+  { icon: "üìÅ", label: "WhatsApp Bot Files",   note: "D:\\Docker projects\\dainamic\\whatsapp-bot\\", urgent: false },
+  { icon: "üíæ", label: "C Drive Space",        note: "Use npm run dev instead of Docker for main app", urgent: false },
 ];
 
 const CATEGORIES = ["All", "Agent OS", "Content", "WhatsApp", "Video", "Infrastructure"];
@@ -203,7 +203,7 @@ export default function ProgressPage() {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 400, letterSpacing: "-0.02em" }}>Progress</h1>
           <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 2 }}>
-            {new Date().toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} ∑ Session 6
+            {new Date().toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long" })} ¬∑ Session 6
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -262,7 +262,7 @@ export default function ProgressPage() {
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>{m.desc}</div>
                   <div style={{ fontSize: 10, color: m.done ? "var(--accent-green)" : m.next ? "var(--accent-purple)" : "var(--text-tertiary)", fontStyle: "italic" }}>
-                    {m.done ? `? ${m.impact}` : m.next ? "? Up next tonight" : m.impact}
+                    {m.done ? `‚Üí ${m.impact}` : m.next ? "‚Üí Up next tonight" : m.impact}
                   </div>
                 </div>
               ))}
@@ -270,7 +270,7 @@ export default function ProgressPage() {
           </Card>
 
           <Card padding="20px">
-            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 14 }}>What's next ó in order</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 14 }}>What's next ‚Äî in order</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {NEXT_UP.map((n, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, background: "var(--glass-white)", border: "0.5px solid var(--glass-border)" }}>
@@ -295,7 +295,7 @@ export default function ProgressPage() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Zap size={14} color="var(--accent-amber)" />
-                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Session Brief ó auto-generated</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)" }}>Session Brief ‚Äî auto-generated</span>
               </div>
               <button onClick={fetchBrief} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", display: "flex", alignItems: "center", gap: 4, fontSize: 11 }}>
                 <RefreshCw size={11} /> Refresh
@@ -303,7 +303,7 @@ export default function ProgressPage() {
             </div>
             {briefLoading ? (
               <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-tertiary)", fontSize: 13 }}>
-                <Loader size={14} style={{ animation: "spin 1s linear infinite" }} /> Reading your system stateÖ
+                <Loader size={14} style={{ animation: "spin 1s linear infinite" }} /> Reading your system state‚Ä¶
               </div>
             ) : (
               <div style={{ fontSize: 14, lineHeight: 1.7, color: "var(--text-primary)", fontStyle: "italic" }}>
@@ -325,14 +325,14 @@ export default function ProgressPage() {
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                 fontSize: 13, fontWeight: 500, marginBottom: 10,
               }}>
-                {listening ? <><MicOff size={16} /> ListeningÖ tap to send</> : <><Mic size={16} /> Tap & speak</>}
+                {listening ? <><MicOff size={16} /> Listening‚Ä¶ tap to send</> : <><Mic size={16} /> Tap & speak</>}
               </button>
             )}
             {transcript && (
               <div style={{ background: "var(--glass-white)", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "var(--text-secondary)", fontStyle: "italic", marginBottom: 10 }}>"{transcript}"</div>
             )}
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-              <input id="agent-input" placeholder="Or type a questionÖ" style={{ flex: 1, fontSize: 13 }}
+              <input id="agent-input" placeholder="Or type a question‚Ä¶" style={{ flex: 1, fontSize: 13 }}
                 onKeyDown={e => { if (e.key === "Enter") { askAgent((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ""; }}} />
               <button className="btn btn-ghost" style={{ padding: "0 14px" }}
                 onClick={() => { const el = document.getElementById("agent-input") as HTMLInputElement; askAgent(el.value); el.value = ""; }}>
@@ -341,7 +341,7 @@ export default function ProgressPage() {
             </div>
             {agentLoading && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-tertiary)", fontSize: 12 }}>
-                <Loader size={12} style={{ animation: "spin 1s linear infinite" }} /> ThinkingÖ
+                <Loader size={12} style={{ animation: "spin 1s linear infinite" }} /> Thinking‚Ä¶
               </div>
             )}
             {agentReply && !agentLoading && (
@@ -389,7 +389,7 @@ export default function ProgressPage() {
           </div>
           <Card padding="20px">
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 14 }}>
-              Build history ó {filteredLog.length} items
+              Build history ‚Äî {filteredLog.length} items
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {filteredLog.map((item, i) => {
@@ -418,7 +418,7 @@ export default function ProgressPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <Card padding="20px">
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 14, display: "flex", justifyContent: "space-between" }}>
-              <span>Session 6 ó tonight's goals</span>
+              <span>Session 6 ‚Äî tonight's goals</span>
               <span style={{ fontSize: 11, color: goalPct >= 100 ? "var(--accent-green)" : "var(--text-tertiary)" }}>{goalPct}%</span>
             </div>
             <div style={{ height: 3, background: "var(--glass-border)", borderRadius: 2, overflow: "hidden", marginBottom: 14 }}>
@@ -439,7 +439,7 @@ export default function ProgressPage() {
           <Card padding="20px">
             <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 14 }}>Log what you did</div>
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-              <input id="task-input" placeholder="Type a taskÖ" style={{ flex: 1, fontSize: 13 }}
+              <input id="task-input" placeholder="Type a task‚Ä¶" style={{ flex: 1, fontSize: 13 }}
                 onKeyDown={e => { if (e.key === "Enter") { addTask((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ""; }}} />
               <button className="btn btn-ghost" style={{ padding: "0 12px" }}
                 onClick={() => { const el = document.getElementById("task-input") as HTMLInputElement; addTask(el.value); el.value = ""; }}>
@@ -466,4 +466,3 @@ export default function ProgressPage() {
     </div>
   );
 }
-
