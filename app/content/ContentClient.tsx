@@ -1,98 +1,111 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { Upload, Film, Send, Trash2, RefreshCw, CheckCircle, X, Plus, Clock } from 'lucide-react'
+import Card from '@/components/Card'
 
-type Clip = {
-  id: string
+type StoredClip = {
   name: string
-  type: string
-  size: string
-  created: string
-  viewUrl: string
-  thumbnail: string
-  driveUrl: string
+  size: number
+  createdAt: string
+  publicUrl: string
 }
 
 type QueueItem = {
   id: string
   title: string
   caption: string
-  topic: string
   platform: string
   scheduled_for: string
   status: string
   video_url: string | null
 }
 
-const PLATFORMS = [
-  { id: 'facebook', label: 'Facebook', emoji: '📘' },
-  { id: 'instagram', label: 'Instagram', emoji: '📸' },
-]
-
-const STATUS_COLORS: Record<string, string> = {
-  queued: 'bg-amber-100 text-amber-800',
-  posted: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  draft: 'bg-gray-100 text-gray-800',
-}
+type Tab = 'upload' | 'create' | 'posted'
 
 export default function ContentClient({ initialQueue = [] }: { initialQueue?: any[] }) {
-  const [activeTab, setActiveTab] = useState<'clips' | 'create' | 'queue'>('clips')
-  const [clips, setClips] = useState<Clip[]>([])
+  const [activeTab, setActiveTab] = useState<Tab>('upload')
+  const [clips, setClips] = useState<StoredClip[]>([])
   const [loadingClips, setLoadingClips] = useState(true)
-  const [selectedClip, setSelectedClip] = useState<Clip | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
+  const [selectedClip, setSelectedClip] = useState<StoredClip | null>(null)
   const [caption, setCaption] = useState('')
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['facebook', 'instagram'])
   const [posting, setPosting] = useState(false)
   const [postResult, setPostResult] = useState<any>(null)
-  const [generating, setGenerating] = useState(false)
-  const [queue, setQueue] = useState<QueueItem[]>([])
+  const [posted, setPosted] = useState<QueueItem[]>(initialQueue)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    fetchClips()
-  }, [])
+  useEffect(() => { fetchClips() }, [])
 
   async function fetchClips() {
     setLoadingClips(true)
     try {
-      const res = await fetch('/api/drive-clips')
+      const res = await fetch('/api/content/upload')
       const data = await res.json()
-      if (data.success) setClips(data.clips)
+      if (data.success) setClips(data.clips || [])
     } catch (err) {
-      console.error(err)
-    } finally {
-      setLoadingClips(false)
+      console.error('Failed to fetch clips:', err)
     }
+    setLoadingClips(false)
   }
 
-  async function generateCaption() {
-    if (!selectedClip) return
-    setGenerating(true)
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    setUploadProgress(`Uploading ${file.name}...`)
+
     try {
-      const res = await fetch('/api/content-agent', {
+      const formData = new FormData()
+      formData.append('video', file)
+
+      const res = await fetch('/api/content/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'generate_scripts',
-          context: {
-            topic: selectedClip.name.replace('.mp4', ''),
-            count: 1,
-            pillar: 'Natural hair care',
-          }
-        })
+        body: formData,
       })
       const data = await res.json()
-      if (data.success && data.data.scripts?.[0]) {
-        setCaption(data.data.scripts[0].caption)
+
+      if (data.success) {
+        setUploadProgress('✅ Uploaded!')
+        fetchClips()
+        setTimeout(() => setUploadProgress(''), 2000)
+      } else {
+        setUploadProgress(`❌ ${data.error}`)
       }
     } catch (err) {
-      console.error(err)
-    } finally {
-      setGenerating(false)
+      setUploadProgress('❌ Upload failed')
     }
+    setUploading(false)
+    if (fileRef.current) fileRef.current.value = ''
   }
 
-  async function postNow() {
-    if (!selectedClip || !caption || selectedPlatforms.length === 0) return
+  async function deleteClip(name: string) {
+    setDeleting(name)
+    try {
+      await fetch('/api/content/upload', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: name }),
+      })
+      setClips(prev => prev.filter(c => c.name !== name))
+      if (selectedClip?.name === name) setSelectedClip(null)
+    } catch (err) {
+      console.error('Delete failed:', err)
+    }
+    setDeleting(null)
+  }
+
+  function selectClip(clip: StoredClip) {
+    setSelectedClip(clip)
+    setCaption('')
+    setPostResult(null)
+    setActiveTab('create')
+  }
+
+  async function postToFacebook() {
+    if (!selectedClip || !caption) return
     setPosting(true)
     setPostResult(null)
     try {
@@ -101,278 +114,355 @@ export default function ContentClient({ initialQueue = [] }: { initialQueue?: an
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           caption,
-          videoUrl: selectedClip.driveUrl,
-          platforms: selectedPlatforms,
-        })
+          videoUrl: selectedClip.publicUrl,
+          fileName: selectedClip.name,
+          platforms: ['facebook'],
+        }),
       })
       const data = await res.json()
       setPostResult(data)
+
       if (data.success) {
-        setQueue(prev => [{
+        setPosted(prev => [{
           id: Date.now().toString(),
           title: selectedClip.name,
           caption,
-          topic: 'video',
-          platform: selectedPlatforms.join(', '),
+          platform: 'facebook',
           scheduled_for: new Date().toISOString(),
           status: 'posted',
-          video_url: selectedClip.driveUrl,
+          video_url: selectedClip.publicUrl,
         }, ...prev])
+        // Remove clip from list after successful post (it'll auto-delete from storage)
+        setClips(prev => prev.filter(c => c.name !== selectedClip.name))
+        setSelectedClip(null)
       }
     } catch (err) {
-      console.error(err)
-    } finally {
-      setPosting(false)
+      setPostResult({ success: false, error: String(err) })
     }
+    setPosting(false)
   }
 
-  function togglePlatform(id: string) {
-    setSelectedPlatforms(prev =>
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-    )
+  function formatSize(bytes: number) {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  function selectClip(clip: Clip) {
-    setSelectedClip(clip)
-    setCaption('')
-    setPostResult(null)
-    setActiveTab('create')
+  const btn = (active: boolean, color = '#a78bfa') => ({
+    padding: '9px 16px', borderRadius: 10,
+    border: `0.5px solid ${active ? color : 'var(--glass-border)'}`,
+    background: active ? `${color}22` : 'transparent',
+    color: active ? color : 'var(--text-tertiary)',
+    fontSize: 12, cursor: 'pointer', display: 'flex',
+    alignItems: 'center', gap: 6, fontWeight: active ? 500 : 400,
+    whiteSpace: 'nowrap' as const,
+  })
+
+  const input = {
+    width: '100%', padding: '10px 14px', borderRadius: 8,
+    border: '0.5px solid var(--glass-border)', background: 'var(--bg-2)',
+    color: 'var(--text-primary)', fontSize: 13,
+    boxSizing: 'border-box' as const, marginBottom: 12,
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">Content Engine</h1>
-            <p className="text-sm text-gray-500">Dainamic Hair · {clips.length} clips ready</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-400 inline-block"></span>
-            <span className="text-sm text-gray-600">Drive connected</span>
-          </div>
-        </div>
+    <div style={{ maxWidth: 960, margin: '0 auto' }} className="fade-up">
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em' }}>Content</h1>
+        <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 2 }}>
+          {clips.length} clip{clips.length !== 1 ? 's' : ''} ready · {posted.filter(p => p.status === 'posted').length} posted
+        </p>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-6">
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
-          {[
-            { id: 'clips', label: `📁 Clips (${clips.length})` },
-            { id: 'create', label: '✏️ Create & Post' },
-            { id: 'queue', label: `📋 Posted (${queue.length})` },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      {/* Tab buttons */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        <button style={btn(activeTab === 'upload', '#60a5fa')} onClick={() => setActiveTab('upload')}>
+          <Upload size={13} /> Upload & Clips
+        </button>
+        <button style={btn(activeTab === 'create', '#a78bfa')} onClick={() => setActiveTab('create')}>
+          <Send size={13} /> Create Post
+        </button>
+        <button style={btn(activeTab === 'posted', '#2dd4bf')} onClick={() => setActiveTab('posted')}>
+          <CheckCircle size={13} /> Posted ({posted.filter(p => p.status === 'posted').length})
+        </button>
+      </div>
 
-        {/* CLIPS TAB */}
-        {activeTab === 'clips' && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm text-gray-500">Select a clip to create a post</p>
-              <button
-                onClick={fetchClips}
-                className="text-sm text-green-600 hover:text-green-700 font-medium"
-              >
-                ↻ Refresh
-              </button>
-            </div>
-            {loadingClips ? (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="bg-gray-200 rounded-xl h-48 animate-pulse" />
-                ))}
+      {/* UPLOAD & CLIPS TAB */}
+      {activeTab === 'upload' && (
+        <>
+          {/* Upload area */}
+          <Card padding="24px" style={{ marginBottom: 20 }}>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="video/*"
+              capture="environment"
+              onChange={handleUpload}
+              style={{ display: 'none' }}
+            />
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              style={{
+                width: '100%', padding: '40px 20px', borderRadius: 12,
+                border: '1px dashed var(--glass-border)', background: 'transparent',
+                color: 'var(--text-tertiary)', fontSize: 13, cursor: uploading ? 'not-allowed' : 'pointer',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+                opacity: uploading ? 0.6 : 1,
+              }}
+            >
+              <Upload size={32} style={{ opacity: 0.4 }} />
+              {uploading ? 'Uploading...' : 'Tap to record or choose a video'}
+            </button>
+            {uploadProgress && (
+              <div style={{
+                marginTop: 12, padding: '10px 14px', borderRadius: 8,
+                background: uploadProgress.includes('✅') ? 'rgba(45,212,191,0.1)' : uploadProgress.includes('❌') ? 'rgba(239,68,68,0.1)' : 'var(--bg-2)',
+                fontSize: 12,
+                color: uploadProgress.includes('✅') ? '#2dd4bf' : uploadProgress.includes('❌') ? '#ef4444' : 'var(--text-secondary)',
+              }}>
+                {uploadProgress}
               </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {clips.map(clip => (
-                  <div
-                    key={clip.id}
-                    onClick={() => selectClip(clip)}
-                    className={`bg-white rounded-xl border-2 overflow-hidden cursor-pointer transition-all hover:shadow-md ${
-                      selectedClip?.id === clip.id ? 'border-green-500' : 'border-gray-200'
-                    }`}
-                  >
-                    {clip.thumbnail ? (
-                      <img
-                        src={clip.thumbnail}
-                        alt={clip.name}
-                        className="w-full h-32 object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-32 bg-gray-100 flex items-center justify-center">
-                        <span className="text-3xl">🎬</span>
+            )}
+          </Card>
+
+          {/* Clips list */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
+              Your clips
+            </div>
+            <button onClick={fetchClips} disabled={loadingClips} style={{ ...btn(false), padding: '6px 10px' }}>
+              <RefreshCw size={11} /> Refresh
+            </button>
+          </div>
+
+          {loadingClips ? (
+            <Card padding="40px" style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Loading clips...</div>
+            </Card>
+          ) : clips.length === 0 ? (
+            <Card padding="40px" style={{ textAlign: 'center' }}>
+              <Film size={32} style={{ opacity: 0.2, margin: '0 auto 12px' }} />
+              <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>No clips yet — upload your first video above</div>
+            </Card>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {clips.map((clip) => (
+                <Card key={clip.name} padding="14px 18px">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        width: 40, height: 40, borderRadius: 8,
+                        background: 'rgba(96,165,250,0.12)', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      }}>
+                        <Film size={16} color="#60a5fa" />
                       </div>
-                    )}
-                    <div className="p-3">
-                      <p className="text-xs font-medium text-gray-800 truncate">{clip.name}</p>
-                      <p className="text-xs text-gray-400 mt-1">{clip.size}</p>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {clip.name.replace(/^\d+_/, '')}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                          {formatSize(clip.size)} · {new Date(clip.createdAt).toLocaleDateString('en-ZA')}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       <button
-                        onClick={(e) => { e.stopPropagation(); selectClip(clip) }}
-                        className="mt-2 w-full bg-green-600 text-white text-xs py-1.5 rounded-lg hover:bg-green-700"
+                        onClick={() => selectClip(clip)}
+                        style={{ ...btn(true, '#a78bfa'), padding: '7px 12px' }}
                       >
-                        Use this clip
+                        <Send size={11} /> Post
+                      </button>
+                      <button
+                        onClick={() => deleteClip(clip.name)}
+                        disabled={deleting === clip.name}
+                        style={{ ...btn(false), padding: '7px 10px', color: '#ef4444' }}
+                      >
+                        <Trash2 size={11} />
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
-        {/* CREATE & POST TAB */}
-        {activeTab === 'create' && (
-          <div className="space-y-5">
-            {/* Selected clip */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <label className="block text-sm font-medium text-gray-700 mb-3">Selected clip</label>
-              {selectedClip ? (
-                <div className="flex items-center gap-4">
-                  {selectedClip.thumbnail && (
-                    <img src={selectedClip.thumbnail} className="w-20 h-14 object-cover rounded-lg" alt="" />
-                  )}
+      {/* CREATE POST TAB */}
+      {activeTab === 'create' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Selected clip */}
+          <Card padding="20px">
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 10 }}>Selected clip</div>
+            {selectedClip ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 8,
+                    background: 'rgba(167,139,250,0.12)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Film size={15} color="#a78bfa" />
+                  </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{selectedClip.name}</p>
-                    <p className="text-xs text-gray-400">{selectedClip.size}</p>
-                    <a href={selectedClip.driveUrl} target="_blank" rel="noopener noreferrer"
-                      className="text-xs text-green-600 hover:underline">View in Drive →</a>
-                  </div>
-                  <button
-                    onClick={() => setActiveTab('clips')}
-                    className="ml-auto text-sm text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg"
-                  >
-                    Change clip
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setActiveTab('clips')}
-                  className="w-full border-2 border-dashed border-gray-200 rounded-xl py-8 text-sm text-gray-400 hover:border-green-400 hover:text-green-600"
-                >
-                  + Select a clip from Drive
-                </button>
-              )}
-            </div>
-
-            {/* Caption */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">Caption</label>
-                <button
-                  onClick={generateCaption}
-                  disabled={generating || !selectedClip}
-                  className="text-sm text-green-600 hover:text-green-700 font-medium disabled:opacity-50"
-                >
-                  {generating ? 'Generating...' : '✨ Generate with AI'}
-                </button>
-              </div>
-              <textarea
-                value={caption}
-               onChange={e => setCaption(e.target.value)}
-               placeholder="Write your caption or generate one with AI..."
-               rows={5}
-               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none text-gray-900 bg-white"
-               style={{ color: '#111827', backgroundColor: '#ffffff' }}
-              />
-              <p className="text-xs text-gray-400 mt-1">{caption.length} characters</p>
-            </div>
-
-            {/* Platforms */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <label className="block text-sm font-medium text-gray-700 mb-3">Post to</label>
-              <div className="flex gap-3">
-                {PLATFORMS.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => togglePlatform(p.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
-                      selectedPlatforms.includes(p.id)
-                        ? 'border-green-500 bg-green-50 text-green-700'
-                        : 'border-gray-200 text-gray-600'
-                    }`}
-                  >
-                    {p.emoji} {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Post result */}
-            {postResult && (
-              <div className={`rounded-xl p-4 text-sm ${postResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
-                {postResult.success ? '✅ Posted successfully!' : '❌ Post failed'}
-                {postResult.results && (
-                  <div className="mt-2 space-y-1">
-                    {Object.entries(postResult.results).map(([platform, result]: [string, any]) => (
-                      <p key={platform} className="text-xs">
-                        {platform}: {result.id ? '✅ Success' : `❌ ${result.error?.message || 'Failed'}`}
-                      </p>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Post button */}
-            <button
-              onClick={postNow}
-              disabled={posting || !selectedClip || !caption || selectedPlatforms.length === 0}
-              className="w-full bg-green-600 text-white rounded-xl py-4 text-sm font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
-            >
-              {posting ? '📤 Posting...' : '🚀 Post Now'}
-            </button>
-          </div>
-        )}
-
-        {/* QUEUE TAB */}
-        {activeTab === 'queue' && (
-          <div className="space-y-3">
-            {queue.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-                <p className="text-gray-400 text-sm">No posts yet this session</p>
-                <button
-                  onClick={() => setActiveTab('clips')}
-                  className="mt-3 text-green-600 text-sm font-medium"
-                >
-                  Create your first post
-                </button>
-              </div>
-            ) : (
-              queue.map(item => (
-                <div key={item.id} className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[item.status]}`}>
-                          {item.status}
-                        </span>
-                        <span className="text-xs text-gray-400">{item.platform}</span>
-                      </div>
-                      <p className="text-sm font-medium text-gray-900">{item.title}</p>
-                      <p className="text-sm text-gray-600 line-clamp-2 mt-1">{item.caption}</p>
-                      <p className="text-xs text-gray-400 mt-2">
-                        {new Date(item.scheduled_for).toLocaleString('en-ZA')}
-                      </p>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
+                      {selectedClip.name.replace(/^\d+_/, '')}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
+                      {formatSize(selectedClip.size)}
                     </div>
                   </div>
                 </div>
-              ))
+                <button onClick={() => setActiveTab('upload')} style={btn(false)}>
+                  Change
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setActiveTab('upload')}
+                style={{
+                  width: '100%', padding: '28px 20px', borderRadius: 10,
+                  border: '1px dashed var(--glass-border)', background: 'transparent',
+                  color: 'var(--text-tertiary)', fontSize: 12, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                <Plus size={14} /> Select a clip
+              </button>
             )}
-          </div>
-        )}
-      </div>
+          </Card>
+
+          {/* Caption */}
+          <Card padding="20px">
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 8 }}>Caption</div>
+            <textarea
+              value={caption}
+              onChange={e => setCaption(e.target.value)}
+              placeholder="Write your caption for this post..."
+              rows={5}
+              style={{
+                ...input, marginBottom: 0, resize: 'vertical' as const,
+                minHeight: 100, fontFamily: 'inherit',
+              }}
+            />
+            <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 6 }}>
+              {caption.length} characters
+            </div>
+          </Card>
+
+          {/* Platform */}
+          <Card padding="20px">
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 10 }}>Posting to</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{
+                ...btn(true, '#1877f2'), padding: '10px 16px',
+              }}>
+                <span style={{ fontSize: 14 }}>📘</span> Facebook
+              </div>
+              <div style={{
+                ...btn(false), padding: '10px 16px', opacity: 0.4,
+              }}>
+                <span style={{ fontSize: 14 }}>📸</span> Instagram (soon)
+              </div>
+              <div style={{
+                ...btn(false), padding: '10px 16px', opacity: 0.4,
+              }}>
+                <span style={{ fontSize: 14 }}>🎵</span> TikTok (soon)
+              </div>
+            </div>
+          </Card>
+
+          {/* Post result */}
+          {postResult && (
+            <Card padding="16px" style={{
+              borderColor: postResult.success ? 'rgba(45,212,191,0.3)' : 'rgba(239,68,68,0.3)',
+            }}>
+              <div style={{
+                fontSize: 13, fontWeight: 500,
+                color: postResult.success ? '#2dd4bf' : '#ef4444',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                {postResult.success
+                  ? <><CheckCircle size={14} /> Posted to Facebook!</>
+                  : <><X size={14} /> Post failed</>
+                }
+              </div>
+              {postResult.success && (
+                <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                  Video will be auto-deleted from storage in 5 minutes to save space.
+                </div>
+              )}
+              {!postResult.success && postResult.results?.facebook && (
+                <div style={{ fontSize: 11, color: '#ef4444', marginTop: 6 }}>
+                  {JSON.stringify(postResult.results.facebook.error || postResult.results.facebook)}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* Post button */}
+          <button
+            onClick={postToFacebook}
+            disabled={posting || !selectedClip || !caption}
+            style={{
+              width: '100%', padding: '14px', borderRadius: 12, border: 'none',
+              background: selectedClip && caption ? '#1877f2' : 'var(--bg-2)',
+              color: selectedClip && caption ? 'white' : 'var(--text-tertiary)',
+              fontSize: 14, fontWeight: 600, cursor: selectedClip && caption ? 'pointer' : 'not-allowed',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              opacity: posting ? 0.7 : 1,
+            }}
+          >
+            {posting
+              ? <><RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> Posting to Facebook...</>
+              : <><Send size={14} /> Post to Facebook</>
+            }
+          </button>
+        </div>
+      )}
+
+      {/* POSTED TAB */}
+      {activeTab === 'posted' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {posted.length === 0 ? (
+            <Card padding="40px" style={{ textAlign: 'center' }}>
+              <Clock size={32} style={{ opacity: 0.2, margin: '0 auto 12px' }} />
+              <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>No posts yet — upload a clip and post it</div>
+            </Card>
+          ) : (
+            posted.map(item => (
+              <Card key={item.id} padding="16px 20px">
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <div style={{
+                        fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 500,
+                        background: item.status === 'posted' ? 'rgba(45,212,191,0.12)' : 'rgba(251,191,36,0.12)',
+                        color: item.status === 'posted' ? '#2dd4bf' : '#fbbf24',
+                      }}>
+                        {item.status}
+                      </div>
+                      <span style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>📘 {item.platform}</span>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>{item.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4, lineHeight: 1.4, maxHeight: 44, overflow: 'hidden' }}>
+                      {item.caption}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: 6 }}>
+                      {new Date(item.scheduled_for).toLocaleString('en-ZA')}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
+
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   )
 }
-
