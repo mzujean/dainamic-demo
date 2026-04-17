@@ -1,7 +1,10 @@
-﻿"use client";
-import { useState, useRef, useEffect } from "react";
+"use client";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { Camera, Upload, Package, CheckCircle, X, Plus, Search } from "lucide-react";
+import {
+  Camera, Upload, Package, CheckCircle, X, Plus, Search,
+  Bot, AlertTriangle, RefreshCw, ShoppingCart, Zap
+} from "lucide-react";
 import Card from "@/components/Card";
 
 const supabase = createClient(
@@ -12,6 +15,22 @@ const supabase = createClient(
 type Mode = "view" | "receipt" | "stocktake" | "add-sale" | "add-item";
 
 const CATEGORIES = ["Ingredients", "Packaging", "Tools", "Marketing", "Other"];
+
+type LowStockItem = {
+  id: string;
+  item_name: string;
+  quantity: number;
+  supplier: string;
+  cost_per_unit: number;
+  status: "out" | "critical" | "low";
+};
+
+type AgentScanResult = {
+  total_items: number;
+  low_stock: LowStockItem[];
+  scanned_at: string;
+  success: boolean;
+};
 
 export default function InventoryPage() {
   const [mode, setMode] = useState<Mode>("view");
@@ -26,11 +45,68 @@ export default function InventoryPage() {
   const [newItem, setNewItem] = useState({ item_name: "", category: "Packaging", quantity: "", cost_per_unit: "", supplier: "", notes: "" });
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { fetchInventory(); }, []);
+  // Agent state
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [agentResult, setAgentResult] = useState<AgentScanResult | null>(null);
+  const [agentLastScan, setAgentLastScan] = useState<string | null>(null);
+  const [selectedForReorder, setSelectedForReorder] = useState<Set<string>>(new Set());
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [approvalDone, setApprovalDone] = useState(false);
+  const [agentDismissed, setAgentDismissed] = useState(false);
+
+  useEffect(() => { fetchInventory(); loadLastScan(); }, []);
 
   async function fetchInventory() {
     const { data } = await supabase.from("finance_inventory").select("*").order("item_name");
     setInventory(data || []);
+  }
+
+  async function loadLastScan() {
+    try {
+      const res = await fetch("/api/agents/inventory");
+      const data = await res.json();
+      if (data.last_scan && data.last_scan.low_stock?.length > 0) {
+        setAgentResult({ ...data.last_scan, success: true });
+        setAgentLastScan(data.scanned_at);
+        setAgentDismissed(false);
+      }
+    } catch { /* silent */ }
+  }
+
+  async function runInventoryAgent() {
+    setAgentRunning(true);
+    setAgentResult(null);
+    setAgentDismissed(false);
+    setApprovalDone(false);
+    setSelectedForReorder(new Set());
+    try {
+      const res = await fetch("/api/agents/inventory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      const data: AgentScanResult = await res.json();
+      setAgentResult(data);
+      setAgentLastScan(new Date().toISOString());
+    } catch { /* silent */ }
+    setAgentRunning(false);
+  }
+
+  async function approveReorders() {
+    if (selectedForReorder.size === 0) return;
+    setApprovalLoading(true);
+    const approved = agentResult?.low_stock.filter(i => selectedForReorder.has(i.item_name)) || [];
+    await fetch("/api/agents/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approved_items: approved.map(i => i.item_name) })
+    });
+    setApprovalDone(true);
+    setApprovalLoading(false);
+  }
+
+  function toggleReorderItem(name: string) {
+    setSelectedForReorder(prev => {
+      const next = new Set(prev);
+      next.has(name) ? next.delete(name) : next.add(name);
+      return next;
+    });
   }
 
   function handleImage(e: React.ChangeEvent<HTMLInputElement>) {
@@ -47,8 +123,7 @@ export default function InventoryPage() {
     try {
       const res = await fetch("/api/gemini-vision", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image, prompt: `You are a receipt scanner for a hair product business. Extract all items from this receipt and return ONLY valid JSON, no markdown:
-{"vendor":"store name","date":"YYYY-MM-DD","total":0.00,"items":[{"item_name":"name","quantity":1,"cost_per_unit":0.00,"total_cost":0.00}]}` })
+        body: JSON.stringify({ image, prompt: `You are a receipt scanner for a hair product business. Extract all items from this receipt and return ONLY valid JSON, no markdown:\n{"vendor":"store name","date":"YYYY-MM-DD","total":0.00,"items":[{"item_name":"name","quantity":1,"cost_per_unit":0.00,"total_cost":0.00}]}` })
       });
       const { result: text } = await res.json();
       setResult(JSON.parse(text.replace(/\`\`\`json|\`\`\`/g, "").trim()));
@@ -74,8 +149,7 @@ export default function InventoryPage() {
     try {
       const res = await fetch("/api/gemini-vision", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image, prompt: `You are doing a stock take for a hair product business. Known inventory: ${itemNames}. Look at this photo and identify visible items. Return ONLY valid JSON, no markdown:
-{"found":[{"item_name":"exact name from list","estimated_quantity":1,"notes":"e.g. about half full"}]}` })
+        body: JSON.stringify({ image, prompt: `You are doing a stock take for a hair product business. Known inventory: ${itemNames}. Look at this photo and identify visible items. Return ONLY valid JSON, no markdown:\n{"found":[{"item_name":"exact name from list","estimated_quantity":1,"notes":"e.g. about half full"}]}` })
       });
       const { result: text } = await res.json();
       setResult(JSON.parse(text.replace(/\`\`\`json|\`\`\`/g, "").trim()));
@@ -130,16 +204,187 @@ export default function InventoryPage() {
   const btn = (active: boolean, color = "#a78bfa") => ({
     padding: "9px 16px", borderRadius: 10, border: `0.5px solid ${active ? color : "var(--glass-border)"}`,
     background: active ? `${color}22` : "transparent", color: active ? color : "var(--text-tertiary)",
-    fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontWeight: active ? 500 : 400, whiteSpace: "nowrap" as const
+    fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+    fontWeight: active ? 500 : 400, whiteSpace: "nowrap" as const
   });
 
-  const input = { width: "100%", padding: "10px 14px", borderRadius: 8, border: "0.5px solid var(--glass-border)", background: "var(--bg-2)", color: "var(--text-primary)", fontSize: 13, boxSizing: "border-box" as const, marginBottom: 12 };
+  const input = {
+    width: "100%", padding: "10px 14px", borderRadius: 8,
+    border: "0.5px solid var(--glass-border)", background: "var(--bg-2)",
+    color: "var(--text-primary)", fontSize: 13, boxSizing: "border-box" as const, marginBottom: 12
+  };
+
+  const statusColor = (s: "out" | "critical" | "low") =>
+    s === "out" ? { bg: "rgba(239,68,68,0.12)", text: "#ef4444", label: "Out" } :
+    s === "critical" ? { bg: "rgba(251,191,36,0.12)", text: "#fbbf24", label: "Critical" } :
+    { bg: "rgba(251,146,60,0.12)", text: "#fb923c", label: "Low" };
+
+  const hasAlerts = agentResult && agentResult.low_stock?.length > 0 && !agentDismissed;
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto" }} className="fade-up">
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 22, fontWeight: 400, letterSpacing: "-0.02em" }}>Inventory</h1>
         <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 2 }}>{inventory.length} items tracked</p>
+      </div>
+
+      {/* ── AGENT PANEL ── */}
+      <div style={{ marginBottom: 20 }}>
+        {/* Agent trigger button */}
+        {!agentResult && (
+          <button
+            onClick={runInventoryAgent}
+            disabled={agentRunning}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "10px 18px", borderRadius: 10,
+              border: "0.5px solid rgba(167,139,250,0.4)",
+              background: "rgba(167,139,250,0.08)",
+              color: "#a78bfa", fontSize: 13, cursor: agentRunning ? "not-allowed" : "pointer",
+              opacity: agentRunning ? 0.7 : 1, fontWeight: 500
+            }}
+          >
+            {agentRunning
+              ? <><RefreshCw size={13} style={{ animation: "spin 1s linear infinite" }} /> Scanning stock...</>
+              : <><Bot size={13} /> <Zap size={11} /> Run Inventory Agent</>
+            }
+          </button>
+        )}
+
+        {/* Alert panel */}
+        {hasAlerts && (
+          <div style={{
+            borderRadius: 14, border: "0.5px solid rgba(251,146,60,0.3)",
+            background: "rgba(251,146,60,0.05)", overflow: "hidden"
+          }}>
+            {/* Header */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "14px 18px", borderBottom: "0.5px solid rgba(251,146,60,0.15)"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8,
+                  background: "rgba(251,146,60,0.15)", display: "flex", alignItems: "center", justifyContent: "center"
+                }}>
+                  <AlertTriangle size={15} color="#fb923c" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>
+                    {agentResult.low_stock.length} item{agentResult.low_stock.length !== 1 ? "s" : ""} need attention
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 1 }}>
+                    Agent scanned {agentResult.total_items} items ·{" "}
+                    {agentLastScan ? new Date(agentLastScan).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" }) : "just now"}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  onClick={runInventoryAgent}
+                  disabled={agentRunning}
+                  style={{ ...btn(false), padding: "6px 10px" }}
+                >
+                  <RefreshCw size={11} /> Rescan
+                </button>
+                <button onClick={() => setAgentDismissed(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: 4 }}>
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Low stock items */}
+            <div style={{ padding: "12px 18px" }}>
+              {approvalDone ? (
+                <div style={{ padding: "16px 0", textAlign: "center", fontSize: 13, color: "#2dd4bf" }}>
+                  ✅ Logged to agent memory. Dai Jean will handle reorders.
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 10 }}>
+                    Select items you want to reorder:
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {agentResult.low_stock.map((item) => {
+                      const s = statusColor(item.status);
+                      const selected = selectedForReorder.has(item.item_name);
+                      return (
+                        <div
+                          key={item.item_name}
+                          onClick={() => toggleReorderItem(item.item_name)}
+                          style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            padding: "10px 14px", borderRadius: 10, cursor: "pointer",
+                            border: `0.5px solid ${selected ? "#a78bfa44" : "var(--glass-border)"}`,
+                            background: selected ? "rgba(167,139,250,0.08)" : "var(--bg-2)",
+                            transition: "all 0.15s ease"
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{
+                              width: 16, height: 16, borderRadius: 4,
+                              border: `1.5px solid ${selected ? "#a78bfa" : "var(--glass-border)"}`,
+                              background: selected ? "#a78bfa" : "transparent",
+                              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
+                            }}>
+                              {selected && <CheckCircle size={10} color="white" strokeWidth={3} />}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>{item.item_name}</div>
+                              <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 1 }}>
+                                {item.supplier} {item.cost_per_unit > 0 ? `· R${item.cost_per_unit}/unit` : ""}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Qty: {item.quantity}</div>
+                            <div style={{
+                              fontSize: 10, padding: "2px 7px", borderRadius: 4,
+                              background: s.bg, color: s.text, fontWeight: 500
+                            }}>
+                              {s.label}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Approve button */}
+                  <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+                    <button
+                      onClick={approveReorders}
+                      disabled={selectedForReorder.size === 0 || approvalLoading}
+                      style={{
+                        flex: 1, padding: "11px", borderRadius: 10, border: "none",
+                        background: selectedForReorder.size > 0 ? "#a78bfa" : "var(--bg-2)",
+                        color: selectedForReorder.size > 0 ? "white" : "var(--text-tertiary)",
+                        fontSize: 13, fontWeight: 500, cursor: selectedForReorder.size > 0 ? "pointer" : "not-allowed",
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                        transition: "all 0.15s ease", opacity: approvalLoading ? 0.7 : 1
+                      }}
+                    >
+                      <ShoppingCart size={13} />
+                      {approvalLoading ? "Saving..." : selectedForReorder.size > 0
+                        ? `Approve ${selectedForReorder.size} reorder${selectedForReorder.size !== 1 ? "s" : ""}`
+                        : "Select items to approve"}
+                    </button>
+                    <button onClick={() => setAgentDismissed(true)} style={{ ...btn(false), padding: "11px 16px" }}>
+                      Dismiss
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Rescan button after dismissal */}
+        {agentDismissed && (
+          <button onClick={runInventoryAgent} disabled={agentRunning} style={{ ...btn(false), fontSize: 11 }}>
+            <Bot size={11} /> {agentRunning ? "Scanning..." : "Run agent again"}
+          </button>
+        )}
       </div>
 
       {/* Mode buttons */}
@@ -289,6 +534,10 @@ export default function InventoryPage() {
           {status && <div style={{ marginTop: 12, fontSize: 12, color: "#2dd4bf" }}>{status}</div>}
         </Card>
       )}
+
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }
