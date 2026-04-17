@@ -76,7 +76,7 @@ async function uploadToSupabase(driveFileId: string, fileName: string): Promise<
         "Content-Type": "video/mp4",
         "x-upsert": "true",
       },
-      body: reencoded,
+      body: reencoded as unknown as BodyInit,
     }
   );
 
@@ -221,3 +221,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
   }
 }
+
