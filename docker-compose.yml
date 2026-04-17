@@ -11,3 +11,13 @@ services:
       - .env.local
     environment:
       - NODE_ENV=development
+
+  whatsapp-bot:
+    build: ./whatsapp-bot
+    volumes:
+      - ./whatsapp-bot:/app
+      - /app/node_modules
+      - ./whatsapp-bot/session:/app/session
+    env_file:
+      - ./whatsapp-bot/.env
+    restart: unless-stopped
