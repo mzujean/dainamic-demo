@@ -12,22 +12,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Caption is required' }, { status: 400 })
     }
 
+    // Build Buffer update payload
     const params = new URLSearchParams()
     params.append('profile_ids[]', BUFFER_CHANNEL_ID)
     params.append('text', caption)
 
+    // If scheduling for later
     if (scheduledAt) {
       params.append('scheduled_at', scheduledAt)
     } else {
       params.append('now', 'true')
     }
 
+    // Attach media
     if (videoUrl) {
       params.append('media[video]', videoUrl)
+      params.append('media[thumbnail]', '')
     } else if (imageUrl) {
       params.append('media[photo]', imageUrl)
     }
 
+    // Post to Buffer
     const bufferRes = await fetch(
       `${BUFFER_API_BASE}/updates/create.json?access_token=${BUFFER_API_KEY}`,
       {
@@ -48,6 +53,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
+    // Auto-delete from Supabase Storage after posting
     if (fileName && !scheduledAt) {
       const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
       const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -57,10 +63,11 @@ export async function POST(req: NextRequest) {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}` },
           })
+          console.log('Deleted from Supabase:', fileName)
         } catch (err) {
           console.error('Failed to delete:', err)
         }
-      }, 300000)
+      }, 300_000) // 5 min delay
     }
 
     return NextResponse.json({
