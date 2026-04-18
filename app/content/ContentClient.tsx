@@ -159,7 +159,7 @@ export default function ContentClient({ initialQueue = [] }: { initialQueue?: an
 
   const input = {
     width: '100%', padding: '10px 14px', borderRadius: 8,
-    border: '0.5px solid var(--glass-border)', background: 'var(--bg-2)',
+    border: '0.5px solid rgba(255,255,255,0.12)', background: 'var(--bg-2)',
     color: 'var(--text-primary)', fontSize: 13,
     boxSizing: 'border-box' as const, marginBottom: 12,
   }
@@ -195,7 +195,7 @@ export default function ContentClient({ initialQueue = [] }: { initialQueue?: an
               ref={fileRef}
               type="file"
               accept="video/*"
-              capture="environment"
+              
               onChange={handleUpload}
               style={{ display: 'none' }}
             />
