@@ -29,7 +29,7 @@ type Client = {
   follow_up_status?: string;
 };
 
-type Mode = "list" | "add-client" | "log-sale";
+type Mode = "list" | "add-client" | "log-sale" | "log-expense";
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -42,6 +42,11 @@ export default function ClientsPage() {
   const [search, setSearch] = useState("");
 
   const [newClient, setNewClient] = useState({ name: "", phone: "", notes: "" });
+  const [newExpense, setNewExpense] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    vendor: "", category: "Cost of Sales", description: "", amount: "", payment_method: "EFT", notes: ""
+  });
+
   const [newSale, setNewSale] = useState({
     customer_name: "", phone: "", description: "", amount: "", payment_method: "EFT",
     date: new Date().toISOString().slice(0, 10)
@@ -88,6 +93,36 @@ export default function ClientsPage() {
       setClients(Object.values(map));
     }
     setLoading(false);
+  }
+
+  const SARS_CATEGORIES = [
+    "Cost of Sales",
+    "Packaging & Labels",
+    "Marketing & Advertising",
+    "Transport & Delivery",
+    "Bank Charges",
+    "Equipment & Tools",
+    "Professional Fees",
+    "Data & Airtime",
+    "Other Operating Expenses",
+  ];
+
+  async function logExpense() {
+    if (!newExpense.vendor.trim() || !newExpense.amount) return;
+    setStatus("Saving...");
+    const { error } = await supabase.from("finance_expenses").insert({
+      date: newExpense.date || new Date().toISOString().slice(0, 10),
+      vendor: newExpense.vendor.trim(),
+      category: newExpense.category,
+      description: newExpense.description.trim(),
+      amount: parseFloat(newExpense.amount),
+      payment_method: newExpense.payment_method,
+      notes: newExpense.notes.trim(),
+    });
+    if (error) { setStatus("Error: " + error.message); return; }
+    setStatus("✅ Expense logged!");
+    setNewExpense({ date: new Date().toISOString().slice(0, 10), vendor: "", category: "Cost of Sales", description: "", amount: "", payment_method: "EFT", notes: "" });
+    setTimeout(() => { setMode("list"); setStatus(""); }, 1200);
   }
 
   async function addClient() {
@@ -208,7 +243,46 @@ export default function ClientsPage() {
         <button style={btn(mode === "add-client", "#60a5fa")} onClick={() => setMode("add-client")}>
           <Plus size={13} /> Add Client
         </button>
+        <button style={btn(mode === "log-expense", "#f87171")} onClick={() => setMode("log-expense")}>
+          <Plus size={13} /> Log Expense
+        </button>
       </div>
+
+      {/* LOG EXPENSE */}
+      {mode === "log-expense" && (
+        <Card padding="24px" style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 20, color: "var(--text-secondary)" }}>
+            💸 Log a business expense
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>Date</div>
+          <input type="date" value={newExpense.date} onChange={e => setNewExpense(s => ({ ...s, date: e.target.value }))} style={input} />
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>Supplier / Vendor</div>
+          <input value={newExpense.vendor} onChange={e => setNewExpense(s => ({ ...s, vendor: e.target.value }))} placeholder="e.g. Atlas Trading, Mabira Pack" style={input} />
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>SARS Category</div>
+          <select value={newExpense.category} onChange={e => setNewExpense(s => ({ ...s, category: e.target.value }))} style={input}>
+            {SARS_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+          </select>
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>Description</div>
+          <input value={newExpense.description} onChange={e => setNewExpense(s => ({ ...s, description: e.target.value }))} placeholder="e.g. Shea butter 1kg x 5, 50ml amber bottles x 100" style={input} />
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>Amount (R)</div>
+          <input value={newExpense.amount} onChange={e => setNewExpense(s => ({ ...s, amount: e.target.value }))} placeholder="e.g. 450" style={input} />
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>Payment method</div>
+          <select value={newExpense.payment_method} onChange={e => setNewExpense(s => ({ ...s, payment_method: e.target.value }))} style={input}>
+            <option>EFT</option><option>Cash</option><option>Card</option>
+          </select>
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>Notes (optional — e.g. receipt number, invoice ref)</div>
+          <input value={newExpense.notes} onChange={e => setNewExpense(s => ({ ...s, notes: e.target.value }))} placeholder="e.g. Invoice #1234, for Growth Elixir batch" style={input} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={logExpense} style={{ ...btn(true, "#f87171"), flex: 1, justifyContent: "center", padding: "12px" }}>
+              Log Expense
+            </button>
+            <button onClick={() => setMode("list")} style={{ ...btn(false), padding: "12px 16px" }}>
+              <X size={14} />
+            </button>
+          </div>
+          {status && <div style={{ marginTop: 12, fontSize: 12, color: status.includes("✅") ? "#2dd4bf" : "#f87171" }}>{status}</div>}
+        </Card>
+      )}
 
       {/* LOG SALE */}
       {mode === "log-sale" && (
