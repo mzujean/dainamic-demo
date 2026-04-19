@@ -36,8 +36,8 @@ const MILESTONES = [
   { id: "m4", title: "Agent OS foundation",         desc: "Soul, user, heartbeat — agents have a brain", done: true, impact: "AI can now operate with context" },
   { id: "m5", title: "Knowledge wizard live",       desc: "Dynamic gap system — agents ask when stuck", done: true, impact: "No more generic AI responses" },
   { id: "m6", title: "Agent preferences in settings", desc: "Edit & reset all agent answers anytime", done: true, impact: "Full owner control" },
-  { id: "m7", title: "Inventory agent live",        desc: "First real working agent — stock alerts",  done: false, impact: "Agents start doing real work", next: true },
-  { id: "m8", title: "WhatsApp bot active",         desc: "Customers can order via WhatsApp",         done: false, impact: "Low-data customers can order" },
+  { id: "m7", title: "Inventory agent live",        desc: "First real working agent — stock alerts",  done: true, impact: "Agents start doing real work", next: true },
+  { id: "m8", title: "WhatsApp bot active",         desc: "Customers can order via WhatsApp",         done: true, impact: "Low-data customers can order" },
   { id: "m9", title: "Content engine live",         desc: "30 posts/day auto-generated",              done: false, impact: "Consistent social presence" },
   { id: "m10", title: "First 10 orders",            desc: "Real orders through the system",           done: false, impact: "Revenue flowing through app" },
   { id: "m11", title: "Video pipeline live",        desc: "Upload, transcript, clip, post",           done: false, impact: "Full content automation" },
@@ -45,10 +45,10 @@ const MILESTONES = [
 ];
 
 const SESSION_6_GOALS = [
-  { id: "g1", text: "Build inventory agent — first real working agent", done: false, category: "Agent" },
-  { id: "g2", text: "Inventory agent reads live stock from Supabase",   done: false, category: "Agent" },
-  { id: "g3", text: "Low stock alerts surface in app with approval UI", done: false, category: "Agent" },
-  { id: "g4", text: "Agent writes memory after each run",               done: false, category: "Agent" },
+  { id: "g1", text: "Build inventory agent — first real working agent", done: true, category: "Agent" },
+  { id: "g2", text: "Inventory agent reads live stock from Supabase",   done: true, category: "Agent" },
+  { id: "g3", text: "Low stock alerts surface in app with approval UI", done: true, category: "Agent" },
+  { id: "g4", text: "Agent writes memory after each run",               done: true, category: "Agent" },
 ];
 
 const STATIC_BUILD_LOG: BuildItem[] = [
