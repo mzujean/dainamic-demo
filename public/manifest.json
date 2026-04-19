@@ -9,13 +9,13 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/dainamic-logo.jpg",
+      "src": "/dainamic-logo-2.png",
       "sizes": "192x192",
       "type": "image/jpeg",
       "purpose": "any maskable"
     },
     {
-      "src": "/dainamic-logo.jpg",
+      "src": "/dainamic-logo-2.png",
       "sizes": "512x512",
       "type": "image/jpeg",
       "purpose": "any maskable"
