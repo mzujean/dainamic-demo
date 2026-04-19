@@ -96,7 +96,6 @@ export default function ClientsPage() {
     const { error } = await supabase.from("clients").insert({
       name: newClient.name.trim(),
       phone: newClient.phone.trim(),
-      notes: newClient.notes.trim(),
       follow_up_status: "ok",
       order_count: 0,
       total_spent: 0,
@@ -263,7 +262,7 @@ export default function ClientsPage() {
           {[
             { label: "Full name", key: "name", placeholder: "e.g. Nomsa Dlamini" },
             { label: "Phone number", key: "phone", placeholder: "e.g. 0821234567" },
-            { label: "Notes (optional)", key: "notes", placeholder: "e.g. Prefers butters, based in Soweto" },
+        
           ].map(f => (
             <div key={f.key}>
               <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>{f.label}</div>
