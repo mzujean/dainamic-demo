@@ -13,8 +13,8 @@ export const metadata: Metadata = {
     title: "Dainamic",
   },
   icons: {
-    icon: "/Dainamic_Hair_emblem_big.jpg",
-    apple: "/Dainamic_Hair_emblem_big.jpg",
+    icon: "/dainamic-logo.jpg",
+    apple: "/dainamic-logo.jpg",
   },
 };
 
@@ -22,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        <link rel="apple-touch-icon" href="/Dainamic_Hair_emblem_big.jpg" />
+        <link rel="apple-touch-icon" href="/dainamic-logo.jpg" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
