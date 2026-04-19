@@ -25,7 +25,8 @@ export async function GET() {
       .order("created_at", { ascending: false })
       .limit(1);
 
-    const inventoryFindings = lastLog?.[0]?.findings ?? null;
+    const findings = lastLog?.[0]?.findings ?? null;
+    const inventoryFindings = findings?.inventory ?? null;
 
     return NextResponse.json({
       last_scan: inventoryFindings,
@@ -41,18 +42,16 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
 
-    // If approving reorders, log and return
     if (body.approved_items?.length > 0) {
       await supabase.from("agent_heartbeat_log").insert({
         triggered_by: "user_approval",
         agents_run: ["inventory"],
-        findings: `Approved reorders: ${body.approved_items.join(", ")}`,
-        actions_taken: body.approved_items.map((name: string) => `reorder:${name}`),
+        findings: { inventory: { approved: body.approved_items } },
+        actions_taken: { reorders: body.approved_items },
       });
       return NextResponse.json({ success: true });
     }
 
-    // Scan inventory
     const { data: inventory } = await supabase
       .from("finance_inventory")
       .select("*")
@@ -62,7 +61,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, low_stock: [], total_items: 0 });
     }
 
-    // Find low stock
     const lowStock = inventory
       .filter((i) => i.item_name !== "delivery of items above")
       .filter((i) => (i.quantity ?? 0) <= REORDER_THRESHOLD)
@@ -75,7 +73,6 @@ export async function POST(req: NextRequest) {
         status: i.quantity === 0 ? "out" : i.quantity <= 1 ? "critical" : "low",
       }));
 
-    // Get past memories
     const { data: memories } = await supabase
       .from("agent_memory")
       .select("insight")
@@ -87,7 +84,6 @@ export async function POST(req: NextRequest) {
       ? `Past owner decisions:\n${memories.map((m, i) => `${i + 1}. ${m.insight}`).join("\n")}\n\n`
       : "";
 
-    // Generate insight
     const completion = await groq.chat.completions.create({
       model: "llama3-8b-8192",
       messages: [
@@ -106,7 +102,6 @@ export async function POST(req: NextRequest) {
 
     const insight = completion.choices[0]?.message?.content ?? "";
 
-    // Write to agent_memory
     await supabase.from("agent_memory").insert({
       agent_type: "inventory",
       insight,
@@ -114,12 +109,11 @@ export async function POST(req: NextRequest) {
       tags: ["inventory", "scan", "low-stock"],
     });
 
-    // Log heartbeat using actual table columns
     await supabase.from("agent_heartbeat_log").insert({
       triggered_by: "user_manual",
       agents_run: ["inventory"],
-      findings: JSON.stringify({ low_stock: lowStock, total_items: inventory.length, insight }),
-      actions_taken: lowStock.map((i) => `alert:${i.item_name}`),
+      findings: { inventory: { low_stock: lowStock, total_items: inventory.length, insight } },
+      actions_taken: { alerts: lowStock.map((i) => i.item_name) },
     });
 
     return NextResponse.json({
