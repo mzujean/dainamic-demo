@@ -150,7 +150,7 @@ export default function ClientsPage() {
     }
 
     setStatus("✅ Sale logged!");
-    setNewSale({ customer_name: "", phone: "", description: "", amount: "", payment_method: "EFT" });
+    setNewSale({ customer_name: "", phone: "", description: "", amount: "", payment_method: "EFT", date: new Date().toISOString().slice(0, 10) });
     loadClients();
     setTimeout(() => { setMode("list"); setStatus(""); }, 1200);
   }
