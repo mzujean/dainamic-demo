@@ -103,6 +103,7 @@ export default function ProgressPage() {
   const [activeTab, setActiveTab]   = useState<"brief" | "build" | "goals" | "milestones">("milestones");
   const [brief, setBrief]           = useState<string>("");
   const [briefLoading, setBriefLoading] = useState(false);
+  const [liveState, setLiveState] = useState<any>(null);
   const [tasks, setTasks]           = useState<Task[]>([]);
   const [goals, setGoals]           = useState(SESSION_6_GOALS.map(g => ({ ...g })));
   const [listening, setListening]   = useState(false);
