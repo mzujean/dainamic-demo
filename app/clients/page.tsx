@@ -43,7 +43,8 @@ export default function ClientsPage() {
 
   const [newClient, setNewClient] = useState({ name: "", phone: "", notes: "" });
   const [newSale, setNewSale] = useState({
-    customer_name: "", phone: "", description: "", amount: "", payment_method: "EFT"
+    customer_name: "", phone: "", description: "", amount: "", payment_method: "EFT",
+    date: new Date().toISOString().slice(0, 10)
   });
 
   useEffect(() => { loadClients(); }, []);
@@ -113,7 +114,7 @@ export default function ClientsPage() {
 
     // Log to finance_income
     const { error: incomeError } = await supabase.from("finance_income").insert({
-      date: new Date().toISOString().slice(0, 10),
+      date: newSale.date || new Date().toISOString().slice(0, 10),
       customer_name: newSale.customer_name.trim(),
       category: "Products Sold",
       description: newSale.description || "Sale",
@@ -134,7 +135,7 @@ export default function ClientsPage() {
       await supabase.from("clients").update({
         total_spent: (existing[0].total_spent || 0) + parseFloat(newSale.amount),
         order_count: (existing[0].order_count || 0) + 1,
-        last_order_date: new Date().toISOString().slice(0, 10),
+        last_order_date: newSale.date || new Date().toISOString().slice(0, 10),
         follow_up_status: "ok",
       }).eq("id", existing[0].id);
     } else {
@@ -143,7 +144,7 @@ export default function ClientsPage() {
         phone: newSale.phone.trim(),
         total_spent: parseFloat(newSale.amount),
         order_count: 1,
-        last_order_date: new Date().toISOString().slice(0, 10),
+        last_order_date: newSale.date || new Date().toISOString().slice(0, 10),
         follow_up_status: "ok",
       });
     }
@@ -221,10 +222,12 @@ export default function ClientsPage() {
             { label: "Phone (optional)", key: "phone", placeholder: "e.g. 0821234567" },
             { label: "Products sold", key: "description", placeholder: "e.g. Growth Elixir 100ml + Leave-in Cream" },
             { label: "Amount (R)", key: "amount", placeholder: "e.g. 195" },
+    { label: "Date of sale", key: "date", placeholder: "YYYY-MM-DD", type: "date" },
           ].map(f => (
             <div key={f.key}>
               <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>{f.label}</div>
               <input
+                type={(f as any).type || "text"}
                 value={(newSale as any)[f.key]}
                 onChange={e => setNewSale(s => ({ ...s, [f.key]: e.target.value }))}
                 placeholder={f.placeholder}
