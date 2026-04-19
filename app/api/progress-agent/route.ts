@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 async function callGroq(system: string, user: string) {
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${GROQ_API_KEY}`,
+      Authorization: `Bearer ${GROQ_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -21,169 +22,110 @@ async function callGroq(system: string, user: string) {
         { role: "user", content: user },
       ],
       temperature: 0.7,
-      max_tokens: 1000,
+      max_tokens: 600,
     }),
   });
   const data = await res.json();
-  return data.choices[0].message.content;
+  return data.choices[0]?.message?.content ?? "";
 }
 
 async function getSystemState() {
-  // Query all tables to auto-detect what's live and working
-  const [orders, clients, contentQueue, products, finance, sessionProgress] = await Promise.all([
-    supabase.from("orders").select("id, created_at, status").order("created_at", { ascending: false }).limit(5),
-    supabase.from("clients").select("id, name, follow_up_status").limit(100),
-    supabase.from("content_queue").select("id, created_at, status, platform").order("created_at", { ascending: false }).limit(10),
-    supabase.from("products").select("id, name, available").eq("available", true),
-    supabase.from("finance").select("id, created_at").limit(5),
-    supabase.from("session_progress").select("*").order("updated_at", { ascending: false }).limit(20),
+  const [
+    clients, orders, income, expenses, inventory,
+    contentQueue, posts, agentMemory, heartbeat, products
+  ] = await Promise.all([
+    supabase.from("clients").select("id, name, follow_up_status, created_at").order("created_at", { ascending: false }),
+    supabase.from("orders").select("id, created_at, status").order("created_at", { ascending: false }).limit(10),
+    supabase.from("finance_income").select("id, amount, date, customer_name").order("date", { ascending: false }).limit(20),
+    supabase.from("finance_expenses").select("id, amount, date").order("date", { ascending: false }).limit(10),
+    supabase.from("finance_inventory").select("id, item_name, quantity").order("item_name"),
+    supabase.from("content_queue").select("id, status, platform, created_at").order("created_at", { ascending: false }).limit(10),
+    supabase.from("posts").select("id, created_at, platform").order("created_at", { ascending: false }).limit(10),
+    supabase.from("agent_memory").select("insight, agent_type, created_at").order("created_at", { ascending: false }).limit(10),
+    supabase.from("agent_heartbeat_log").select("created_at, triggered_by").order("created_at", { ascending: false }).limit(5),
+    supabase.from("products").select("id, name").limit(20),
   ]);
 
-  return {
-    orders: {
-      exists: !orders.error && (orders.data?.length ?? 0) > 0,
-      count: orders.data?.length ?? 0,
-      latest: orders.data?.[0] ?? null,
-    },
-    clients: {
-      exists: !clients.error && (clients.data?.length ?? 0) > 0,
-      count: clients.data?.length ?? 0,
-    },
-    contentQueue: {
-      exists: !contentQueue.error && (contentQueue.data?.length ?? 0) > 0,
-      count: contentQueue.data?.length ?? 0,
-      latest: contentQueue.data?.[0] ?? null,
-    },
-    products: {
-      exists: !products.error && (products.data?.length ?? 0) > 0,
-      count: products.data?.length ?? 0,
-    },
-    finance: {
-      exists: !finance.error && (finance.data?.length ?? 0) > 0,
-    },
-    sessionProgress: sessionProgress.data ?? [],
-  };
-}
+  const totalRevenue = income.data?.reduce((sum, r) => sum + Number(r.amount || 0), 0) ?? 0;
+  const totalExpenses = expenses.data?.reduce((sum, r) => sum + Number(r.amount || 0), 0) ?? 0;
+  const lowStock = inventory.data?.filter(i => (i.quantity ?? 0) <= 3).length ?? 0;
 
-async function ensureSessionProgressTable() {
-  // Try inserting a test row to see if table exists — if not, we handle gracefully
-  const { error } = await supabase.from("session_progress").select("id").limit(1);
-  return !error;
+  return {
+    clients: { count: clients.data?.length ?? 0, latest: clients.data?.[0]?.name ?? null },
+    orders: { count: orders.data?.length ?? 0 },
+    income: { count: income.data?.length ?? 0, total: totalRevenue, latest: income.data?.[0] ?? null },
+    expenses: { count: expenses.data?.length ?? 0, total: totalExpenses },
+    inventory: { count: inventory.data?.length ?? 0, lowStock },
+    contentQueue: { count: contentQueue.data?.length ?? 0 },
+    posts: { count: posts.data?.length ?? 0 },
+    agentMemory: { count: agentMemory.data?.length ?? 0, latest: agentMemory.data?.[0]?.insight ?? null },
+    heartbeat: { lastRun: heartbeat.data?.[0]?.created_at ?? null },
+    products: { count: products.data?.length ?? 0 },
+  };
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { action, message, manualUpdate } = await req.json();
+    const { action, message } = await req.json();
 
-    // AUTO BRIEF — called on page load
+    const state = await getSystemState();
+
+    const stateText = `
+LIVE APP STATE (auto-detected from Supabase right now):
+- Clients tracked: ${state.clients.count}${state.clients.latest ? ` (latest: ${state.clients.latest})` : ""}
+- Sales logged: ${state.income.count} · Total revenue: R${state.income.total.toFixed(2)}
+- Expenses logged: ${state.expenses.count} · Total spent: R${state.expenses.total.toFixed(2)}
+- Inventory items: ${state.inventory.count} · Low stock: ${state.inventory.lowStock} items need reorder
+- Orders: ${state.orders.count}
+- Content queue: ${state.contentQueue.count} items
+- Posts published: ${state.posts.count}
+- Agent memories: ${state.agentMemory.count}${state.agentMemory.latest ? ` (latest: "${state.agentMemory.latest}")` : ""}
+- Products in store: ${state.products.count}
+- Last agent heartbeat: ${state.heartbeat.lastRun ? new Date(state.heartbeat.lastRun).toLocaleString("en-ZA") : "never"}
+
+WHAT'S WORKING:
+${state.clients.count > 0 ? "✅ Clients page — real data from Supabase" : "⏳ Clients page — needs real data"}
+${state.income.count > 0 ? "✅ Sales logging — finance_income has entries" : "⏳ Sales logging — no sales recorded yet"}
+${state.inventory.count > 0 ? "✅ Inventory — tracking " + state.inventory.count + " items" : "⏳ Inventory — empty"}
+${state.agentMemory.count > 0 ? "✅ Agent memory — " + state.agentMemory.count + " insights stored" : "⏳ Agent memory — no decisions logged yet"}
+${state.posts.count > 0 ? "✅ Content posting — " + state.posts.count + " posts published" : "⏳ Content posting — not yet working"}
+${state.products.count > 0 ? "✅ Products loaded — " + state.products.count + " products" : "⏳ Products — not loaded"}
+
+CURRENT FOCUS (this week):
+- Fix analytics numbers to match reality
+- Build finance agent
+- Build client agent  
+- Fix WhatsApp templates
+- Content posting to Facebook (weekend)
+`.trim();
+
     if (action === "get_brief") {
-      const state = await getSystemState();
-      const tableExists = await ensureSessionProgressTable();
+      const system = `You are the Dainamic Hair OS assistant — Dai-Jean's smart build co-founder.
+Give a concise morning standup brief based on live app data.
+Be warm, specific, and direct. Second person only ("you have", "you're at").
+Under 80 words. End with ONE clear priority for right now.
+Today is ${new Date().toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.`;
 
-      // Build what we know automatically from data
-      const autoDetected = [
-        state.products.exists ? `${state.products.count} products live in store` : "No products loaded yet",
-        state.orders.exists ? `${state.orders.count} orders received — store is working` : "No orders yet",
-        state.clients.exists ? `${state.clients.count} clients in database` : "No clients added yet",
-        state.contentQueue.exists ? `${state.contentQueue.count} items in content queue — content engine fired` : "Content queue is empty",
-        state.finance.exists ? "Finance entries recorded" : "No finance entries yet",
-      ];
-
-      // Known manual progress from session_progress table
-      const manualItems = tableExists ? state.sessionProgress.map((s: any) => `${s.feature}: ${s.status} — ${s.note}`).join("\n") : "";
-
-      const system = `You are the Dainamic Hair OS assistant — a smart, concise build agent for Dai-Jean's hair business app.
-Your job is to brief Dai-Jean at the start of each session on exactly where things stand and what to focus on.
-Be warm, direct, and specific. Like a co-founder giving a morning standup. No fluff.
-Speak in second person — "you have", "you're working on".
-Keep it under 80 words. End with one clear priority action.`;
-
-      const user = `Today is Session 4 — ${new Date().toLocaleDateString("en-ZA", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.
-
-AUTO-DETECTED FROM SUPABASE:
-${autoDetected.join("\n")}
-
-MANUALLY CONFIRMED PROGRESS:
-${manualItems || "WhatsApp number switched to personal — bot unblocked\nDocker stack updated\nContent scheduler page built\nMeta Developer app created"}
-
-SESSION 4 GOALS:
-1. WhatsApp bot QR scan — go live
-2. Install Node.js on Windows
-3. Test content page end-to-end
-4. Set up Facebook auto-posting via Make.com
-5. Upload clips to Google Drive
-
-Give Dai-Jean her morning brief. What's done, what's next, what's the one thing to focus on right now.`;
-
-      const brief = await callGroq(system, user);
-
-      return NextResponse.json({
-        success: true,
-        brief,
-        state: {
-          autoDetected,
-          sessionProgress: state.sessionProgress,
-          tableExists,
-        },
-      });
+      const brief = await callGroq(system, stateText);
+      return NextResponse.json({ success: true, brief, state });
     }
 
-    // VOICE QUESTION — user asks something mid-session
     if (action === "ask") {
-      const state = await getSystemState();
+      const system = `You are the Dainamic Hair OS assistant. Answer Dai-Jean's questions about her business app.
+Be specific, warm, direct. Use the live data provided. Max 60 words.`;
 
-      const system = `You are the Dainamic Hair OS build assistant. Answer Dai-Jean's questions about the current build state concisely and helpfully.
-You have access to live data from Supabase. Be specific, warm, and direct. Max 60 words per response.`;
-
-      const user = `Live system state:
-- Products in store: ${state.products.count}
-- Orders received: ${state.orders.count}
-- Content queue items: ${state.contentQueue.count}
-- Clients in DB: ${state.clients.count}
-
-Session 4 is in progress. WhatsApp number switched to personal.
-
-Dai-Jean asks: "${message}"`;
-
-      const response = await callGroq(system, user);
+      const response = await callGroq(system, `${stateText}\n\nDai-Jean asks: "${message}"`);
       return NextResponse.json({ success: true, response });
     }
 
-    // MANUAL UPDATE — user confirms something is done
-    if (action === "update_progress") {
-      const { feature, status, note, session } = manualUpdate;
-
-      const { error } = await supabase.from("session_progress").upsert({
-        feature,
-        status,
-        note,
-        session: session ?? "S4",
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "feature" });
-
-      if (error) {
-        // Table might not exist yet — return instructions
-        return NextResponse.json({
-          success: false,
-          error: "session_progress table not found. Create it in Supabase.",
-          sql: `create table session_progress (
-  id uuid default gen_random_uuid() primary key,
-  feature text unique not null,
-  status text not null,
-  note text,
-  session text,
-  updated_at timestamptz default now()
-);`
-        });
-      }
-
-      return NextResponse.json({ success: true, message: `${feature} marked as ${status}` });
+    if (action === "get_state") {
+      return NextResponse.json({ success: true, state });
     }
 
     return NextResponse.json({ success: false, error: "Unknown action" }, { status: 400 });
 
-  } catch (error) {
-    console.error("Progress agent error:", error);
-    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+  } catch (err) {
+    console.error("[progress-agent]", err);
+    return NextResponse.json({ success: false, error: String(err) }, { status: 500 });
   }
 }
