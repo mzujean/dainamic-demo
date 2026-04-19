@@ -33,7 +33,7 @@ export default function DashboardClient({ income, expenses, inventory, clients, 
   useEffect(() => {
     setGreeting(getGreeting());
     // Load latest agent memory insight
-    fetch("/api/agent/feedback?agent_type=inventory&limit=1")
+    fetch("/api/agents/feedback?agent_type=inventory&limit=1")
       .then(r => r.json())
       .then(d => { if (d.memories?.[0]) setAgentInsight(d.memories[0].insight); })
       .catch(() => {});

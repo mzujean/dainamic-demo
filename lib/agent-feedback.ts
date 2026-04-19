@@ -20,7 +20,7 @@ export interface DecisionPayload {
  */
 export async function learnFromDecision(payload: DecisionPayload): Promise<string | null> {
   try {
-    const res = await fetch('/api/agent/feedback', {
+    const res = await fetch('/api/agents/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -40,7 +40,7 @@ export async function learnFromDecision(payload: DecisionPayload): Promise<strin
  */
 export async function getAgentMemory(agent_type: string, limit = 10): Promise<string[]> {
   try {
-    const res = await fetch(`/api/agent/feedback?agent_type=${agent_type}&limit=${limit}`)
+    const res = await fetch(`/api/agents/feedback?agent_type=${agent_type}&limit=${limit}`)
     if (!res.ok) return []
     const data = await res.json()
     return (data.memories ?? []).map((m: { insight: string }) => m.insight)

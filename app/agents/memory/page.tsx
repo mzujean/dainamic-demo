@@ -29,7 +29,7 @@ export default function MemoryPage() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const res = await fetch(`/api/agent/feedback?limit=50`)
+      const res = await fetch(`/api/agents/feedback?limit=50`)
       const data = await res.json()
       setMemories(data.memories ?? [])
       setLoading(false)
