@@ -228,7 +228,7 @@ export default function ProgressPage() {
       {/* Tabs */}
       <div style={{ display: "flex", gap: 4, marginBottom: 16, background: "var(--glass-white)", borderRadius: 10, padding: 4, width: "fit-content" }}>
         <button style={tabStyle("milestones")} onClick={() => setActiveTab("milestones")}>Milestones</button>
-        <button style={tabStyle("brief")}      onClick={() => { setActiveTab("brief"); fetchBrief(); }}>Agent Brief</button>
+        <button style={tabStyle("brief")}      onClick={() => setActiveTab("brief")}>Agent Brief</button>
         <button style={tabStyle("build")}      onClick={() => setActiveTab("build")}>Build Log</button>
         <button style={tabStyle("goals")}      onClick={() => setActiveTab("goals")}>Tonight</button>
       </div>
