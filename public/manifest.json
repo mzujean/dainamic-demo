@@ -1,0 +1,24 @@
+{
+  "name": "Dainamic Hair - Business OS",
+  "short_name": "Dainamic",
+  "description": "Your hair business, fully automated",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/Dainamic_Hair_emblem_big.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/Dainamic_Hair_emblem_big.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}
