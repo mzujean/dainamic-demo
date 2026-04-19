@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, ShoppingBag, Package, Megaphone,
-  Users, BarChart3, MessageCircle, Settings, Zap, TrendingUp
+  Users, BarChart3, MessageCircle, Settings, Zap, TrendingUp, Brain
 } from "lucide-react";
 
 const NAV = [
@@ -16,6 +16,7 @@ const NAV = [
   { href: "/analytics",  icon: BarChart3,       label: "Analytics" },
   { href: "/whatsapp",   icon: MessageCircle,   label: "WhatsApp" },
   { href: "/agents",     icon: Zap,             label: "Agents" },
+  { href: "/agents/memory", icon: Brain,           label: "Memory" },
 ];
 
 export default function Sidebar() {
