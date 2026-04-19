@@ -6,6 +6,7 @@ import {
   Bot, AlertTriangle, RefreshCw, ShoppingCart, Zap
 } from "lucide-react";
 import Card from "@/components/Card";
+import { learnFromDecision } from "@/lib/agent-feedback";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -92,6 +93,30 @@ export default function InventoryPage() {
     if (selectedForReorder.size === 0) return;
     setApprovalLoading(true);
     const approved = agentResult?.low_stock.filter(i => selectedForReorder.has(i.item_name)) || [];
+    const rejected = agentResult?.low_stock.filter(i => !selectedForReorder.has(i.item_name)) || [];
+
+    // Record approvals
+    for (const item of approved) {
+      await learnFromDecision({
+        agent_type: "inventory",
+        action_type: "reorder_alert",
+        decision: "approved",
+        suggestion: `Reorder ${item.item_name} (qty: ${item.quantity}, status: ${item.status})`,
+        context: { product: item.item_name, supplier: item.supplier, quantity: item.quantity, status: item.status }
+      });
+    }
+
+    // Record rejections
+    for (const item of rejected) {
+      await learnFromDecision({
+        agent_type: "inventory",
+        action_type: "reorder_alert",
+        decision: "rejected",
+        suggestion: `Reorder ${item.item_name} (qty: ${item.quantity}, status: ${item.status})`,
+        context: { product: item.item_name, supplier: item.supplier, quantity: item.quantity, status: item.status }
+      });
+    }
+
     await fetch("/api/agents/inventory", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
