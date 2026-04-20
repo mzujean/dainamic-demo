@@ -1,12 +1,11 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
   Camera, Upload, Package, CheckCircle, X, Plus, Search,
-  Bot, AlertTriangle, RefreshCw, ShoppingCart, Zap
+  Bot, AlertTriangle, RefreshCw, ShoppingCart, Zap, Edit2, Trash2
 } from "lucide-react";
 import Card from "@/components/Card";
-import { learnFromDecision } from "@/lib/agent-feedback";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,9 +41,12 @@ export default function InventoryPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [status, setStatus] = useState("");
-  const [sale, setSale] = useState({ customer_name: "", description: "", amount: "", payment_method: "EFT" });
   const [newItem, setNewItem] = useState({ item_name: "", category: "Packaging", quantity: "", cost_per_unit: "", supplier: "", notes: "" });
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editRow, setEditRow] = useState<any>({});
 
   // Agent state
   const [agentRunning, setAgentRunning] = useState(false);
@@ -71,7 +73,7 @@ export default function InventoryPage() {
         setAgentLastScan(data.scanned_at);
         setAgentDismissed(false);
       }
-    } catch { /* silent */ }
+    } catch { }
   }
 
   async function runInventoryAgent() {
@@ -85,7 +87,7 @@ export default function InventoryPage() {
       const data: AgentScanResult = await res.json();
       setAgentResult(data);
       setAgentLastScan(new Date().toISOString());
-    } catch { /* silent */ }
+    } catch { }
     setAgentRunning(false);
   }
 
@@ -95,27 +97,22 @@ export default function InventoryPage() {
     const approved = agentResult?.low_stock.filter(i => selectedForReorder.has(i.item_name)) || [];
     const rejected = agentResult?.low_stock.filter(i => !selectedForReorder.has(i.item_name)) || [];
 
-    // Record approvals
-    for (const item of approved) {
-      await learnFromDecision({
-        agent_type: "inventory",
-        action_type: "reorder_alert",
-        decision: "approved",
-        suggestion: `Reorder ${item.item_name} (qty: ${item.quantity}, status: ${item.status})`,
-        context: { product: item.item_name, supplier: item.supplier, quantity: item.quantity, status: item.status }
-      });
-    }
+    const approvedNames = approved.map(i => i.item_name).join(", ");
+    const rejectedNames = rejected.map(i => i.item_name).join(", ");
 
-    // Record rejections
-    for (const item of rejected) {
-      await learnFromDecision({
+    await fetch("/api/agents/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         agent_type: "inventory",
-        action_type: "reorder_alert",
-        decision: "rejected",
-        suggestion: `Reorder ${item.item_name} (qty: ${item.quantity}, status: ${item.status})`,
-        context: { product: item.item_name, supplier: item.supplier, quantity: item.quantity, status: item.status }
-      });
-    }
+        action_type: "reorder_decision",
+        decision: "approved",
+        suggestion: `Low stock scan found ${agentResult?.low_stock.length} items needing reorder`,
+        modification: approvedNames ? `Owner approved: ${approvedNames}` : undefined,
+        rejection_reason: rejectedNames ? `Owner skipped: ${rejectedNames}` : undefined,
+        context: { approved_count: approved.length, rejected_count: rejected.length }
+      })
+    });
 
     await fetch("/api/agents/inventory", {
       method: "POST",
@@ -124,6 +121,31 @@ export default function InventoryPage() {
     });
     setApprovalDone(true);
     setApprovalLoading(false);
+  }
+
+  async function saveEdit(id: string) {
+    setStatus("Saving...");
+    const total = parseFloat(editRow.cost_per_unit || 0) * parseFloat(editRow.quantity || 0);
+    const { error } = await supabase.from("finance_inventory").update({
+      item_name: editRow.item_name,
+      quantity: parseFloat(editRow.quantity),
+      cost_per_unit: parseFloat(editRow.cost_per_unit || 0),
+      total_cost: total,
+      supplier: editRow.supplier,
+      notes: editRow.notes,
+      date: editRow.date,
+    }).eq("id", id);
+    if (error) { setStatus("Error: " + error.message); return; }
+    setStatus("✅ Updated!");
+    setEditingId(null);
+    fetchInventory();
+    setTimeout(() => setStatus(""), 1500);
+  }
+
+  async function deleteItem(id: string) {
+    if (!confirm("Delete this item? This cannot be undone.")) return;
+    await supabase.from("finance_inventory").delete().eq("id", id);
+    fetchInventory();
   }
 
   function toggleReorderItem(name: string) {
@@ -151,7 +173,7 @@ export default function InventoryPage() {
         body: JSON.stringify({ image, prompt: `You are a receipt scanner for a hair product business. Extract all items from this receipt and return ONLY valid JSON, no markdown:\n{"vendor":"store name","date":"YYYY-MM-DD","total":0.00,"items":[{"item_name":"name","quantity":1,"cost_per_unit":0.00,"total_cost":0.00}]}` })
       });
       const { result: text } = await res.json();
-      setResult(JSON.parse(text.replace(/\`\`\`json|\`\`\`/g, "").trim()));
+      setResult(JSON.parse(text.replace(/```json|```/g, "").trim()));
       setStatus("");
     } catch { setStatus("Could not read receipt. Try a clearer photo."); }
     setLoading(false);
@@ -161,7 +183,7 @@ export default function InventoryPage() {
     if (!result) return;
     setLoading(true); setStatus("Saving...");
     const today = result.date || new Date().toISOString().slice(0, 10);
-    await supabase.from("finance_expenses").insert({ date: today, vendor: result.vendor, category: "Inventory", description: result.items.map((i: any) => i.item_name).join(", "), amount: result.total, payment_method: "EFT", notes: "Scanned via app" });
+    await supabase.from("finance_expenses").insert({ date: today, vendor: result.vendor, category: "Cost of Sales", description: result.items.map((i: any) => i.item_name).join(", "), amount: result.total, payment_method: "EFT", notes: "Scanned via app" });
     await supabase.from("finance_inventory").insert(result.items.map((i: any) => ({ date: today, item_name: i.item_name, quantity: i.quantity, cost_per_unit: i.cost_per_unit, total_cost: i.total_cost, supplier: result.vendor, notes: "Added via receipt scan" })));
     setStatus("✅ Saved!"); setResult(null); setImage(null); fetchInventory();
     setLoading(false);
@@ -177,7 +199,7 @@ export default function InventoryPage() {
         body: JSON.stringify({ image, prompt: `You are doing a stock take for a hair product business. Known inventory: ${itemNames}. Look at this photo and identify visible items. Return ONLY valid JSON, no markdown:\n{"found":[{"item_name":"exact name from list","estimated_quantity":1,"notes":"e.g. about half full"}]}` })
       });
       const { result: text } = await res.json();
-      setResult(JSON.parse(text.replace(/\`\`\`json|\`\`\`/g, "").trim()));
+      setResult(JSON.parse(text.replace(/```json|```/g, "").trim()));
       setStatus("");
     } catch { setStatus("Could not identify items. Try a clearer photo."); }
     setLoading(false);
@@ -194,14 +216,6 @@ export default function InventoryPage() {
     setLoading(false);
   }
 
-  async function logSale() {
-    if (!sale.customer_name || !sale.amount) return;
-    setLoading(true); setStatus("Logging sale...");
-    await supabase.from("finance_income").insert({ date: new Date().toISOString().slice(0, 10), customer_name: sale.customer_name, category: "Products Sold", description: sale.description, amount: parseFloat(sale.amount), payment_method: sale.payment_method, notes: "Added via app" });
-    setStatus("✅ Sale logged!"); setSale({ customer_name: "", description: "", amount: "", payment_method: "EFT" });
-    setLoading(false);
-  }
-
   async function addItem() {
     if (!newItem.item_name || !newItem.quantity) return;
     setLoading(true); setStatus("Adding item...");
@@ -215,7 +229,8 @@ export default function InventoryPage() {
       supplier: newItem.supplier,
       notes: newItem.category + (newItem.notes ? " — " + newItem.notes : "")
     });
-    setStatus("✅ Item added!"); setNewItem({ item_name: "", category: "Packaging", quantity: "", cost_per_unit: "", supplier: "", notes: "" });
+    setStatus("✅ Item added!");
+    setNewItem({ item_name: "", category: "Packaging", quantity: "", cost_per_unit: "", supplier: "", notes: "" });
     fetchInventory(); setLoading(false);
   }
 
@@ -241,8 +256,8 @@ export default function InventoryPage() {
 
   const statusColor = (s: "out" | "critical" | "low") =>
     s === "out" ? { bg: "rgba(239,68,68,0.12)", text: "#ef4444", label: "Out" } :
-    s === "critical" ? { bg: "rgba(251,191,36,0.12)", text: "#fbbf24", label: "Critical" } :
-    { bg: "rgba(251,146,60,0.12)", text: "#fb923c", label: "Low" };
+      s === "critical" ? { bg: "rgba(251,191,36,0.12)", text: "#fbbf24", label: "Critical" } :
+        { bg: "rgba(251,146,60,0.12)", text: "#fb923c", label: "Low" };
 
   const hasAlerts = agentResult && agentResult.low_stock?.length > 0 && !agentDismissed;
 
@@ -253,150 +268,68 @@ export default function InventoryPage() {
         <p style={{ fontSize: 13, color: "var(--text-tertiary)", marginTop: 2 }}>{inventory.length} items tracked</p>
       </div>
 
-      {/* ── AGENT PANEL ── */}
+      {/* Agent panel */}
       <div style={{ marginBottom: 20 }}>
-        {/* Agent trigger button */}
         {!agentResult && (
-          <button
-            onClick={runInventoryAgent}
-            disabled={agentRunning}
-            style={{
-              display: "flex", alignItems: "center", gap: 8,
-              padding: "10px 18px", borderRadius: 10,
-              border: "0.5px solid rgba(167,139,250,0.4)",
-              background: "rgba(167,139,250,0.08)",
-              color: "#a78bfa", fontSize: 13, cursor: agentRunning ? "not-allowed" : "pointer",
-              opacity: agentRunning ? 0.7 : 1, fontWeight: 500
-            }}
-          >
-            {agentRunning
-              ? <><RefreshCw size={13} style={{ animation: "spin 1s linear infinite" }} /> Scanning stock...</>
-              : <><Bot size={13} /> <Zap size={11} /> Run Inventory Agent</>
-            }
+          <button onClick={runInventoryAgent} disabled={agentRunning} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", borderRadius: 10, border: "0.5px solid rgba(167,139,250,0.4)", background: "rgba(167,139,250,0.08)", color: "#a78bfa", fontSize: 13, cursor: agentRunning ? "not-allowed" : "pointer", opacity: agentRunning ? 0.7 : 1, fontWeight: 500 }}>
+            {agentRunning ? <><RefreshCw size={13} style={{ animation: "spin 1s linear infinite" }} /> Scanning stock...</> : <><Bot size={13} /> <Zap size={11} /> Run Inventory Agent</>}
           </button>
         )}
 
-        {/* Alert panel */}
         {hasAlerts && (
-          <div style={{
-            borderRadius: 14, border: "0.5px solid rgba(251,146,60,0.3)",
-            background: "rgba(251,146,60,0.05)", overflow: "hidden"
-          }}>
-            {/* Header */}
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "14px 18px", borderBottom: "0.5px solid rgba(251,146,60,0.15)"
-            }}>
+          <div style={{ borderRadius: 14, border: "0.5px solid rgba(251,146,60,0.3)", background: "rgba(251,146,60,0.05)", overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "0.5px solid rgba(251,146,60,0.15)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: 8,
-                  background: "rgba(251,146,60,0.15)", display: "flex", alignItems: "center", justifyContent: "center"
-                }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(251,146,60,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <AlertTriangle size={15} color="#fb923c" />
                 </div>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-primary)" }}>
-                    {agentResult.low_stock.length} item{agentResult.low_stock.length !== 1 ? "s" : ""} need attention
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 1 }}>
-                    Agent scanned {agentResult.total_items} items ·{" "}
-                    {agentLastScan ? new Date(agentLastScan).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" }) : "just now"}
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{agentResult.low_stock.length} item{agentResult.low_stock.length !== 1 ? "s" : ""} need attention</div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
+                    Scanned {agentResult.total_items} items · {agentLastScan ? new Date(agentLastScan).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" }) : "just now"}
                   </div>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button
-                  onClick={runInventoryAgent}
-                  disabled={agentRunning}
-                  style={{ ...btn(false), padding: "6px 10px" }}
-                >
-                  <RefreshCw size={11} /> Rescan
-                </button>
-                <button onClick={() => setAgentDismissed(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: 4 }}>
-                  <X size={14} />
-                </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={runInventoryAgent} disabled={agentRunning} style={{ ...btn(false), padding: "6px 10px" }}><RefreshCw size={11} /> Rescan</button>
+                <button onClick={() => setAgentDismissed(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: 4 }}><X size={14} /></button>
               </div>
             </div>
-
-            {/* Low stock items */}
             <div style={{ padding: "12px 18px" }}>
               {approvalDone ? (
-                <div style={{ padding: "16px 0", textAlign: "center", fontSize: 13, color: "#2dd4bf" }}>
-                  ✅ Logged to agent memory. Dai Jean will handle reorders.
-                </div>
+                <div style={{ padding: "16px 0", textAlign: "center", fontSize: 13, color: "#2dd4bf" }}>✅ Logged to agent memory. Dai Jean will handle reorders.</div>
               ) : (
                 <>
-                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 10 }}>
-                    Select items you want to reorder:
-                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 10 }}>Select items to reorder:</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {agentResult.low_stock.map((item) => {
                       const s = statusColor(item.status);
                       const selected = selectedForReorder.has(item.item_name);
                       return (
-                        <div
-                          key={item.item_name}
-                          onClick={() => toggleReorderItem(item.item_name)}
-                          style={{
-                            display: "flex", alignItems: "center", justifyContent: "space-between",
-                            padding: "10px 14px", borderRadius: 10, cursor: "pointer",
-                            border: `0.5px solid ${selected ? "#a78bfa44" : "var(--glass-border)"}`,
-                            background: selected ? "rgba(167,139,250,0.08)" : "var(--bg-2)",
-                            transition: "all 0.15s ease"
-                          }}
-                        >
+                        <div key={item.item_name} onClick={() => toggleReorderItem(item.item_name)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: 10, cursor: "pointer", border: `0.5px solid ${selected ? "#a78bfa44" : "var(--glass-border)"}`, background: selected ? "rgba(167,139,250,0.08)" : "var(--bg-2)", transition: "all 0.15s ease" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{
-                              width: 16, height: 16, borderRadius: 4,
-                              border: `1.5px solid ${selected ? "#a78bfa" : "var(--glass-border)"}`,
-                              background: selected ? "#a78bfa" : "transparent",
-                              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
-                            }}>
+                            <div style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${selected ? "#a78bfa" : "var(--glass-border)"}`, background: selected ? "#a78bfa" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                               {selected && <CheckCircle size={10} color="white" strokeWidth={3} />}
                             </div>
                             <div>
-                              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>{item.item_name}</div>
-                              <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 1 }}>
-                                {item.supplier} {item.cost_per_unit > 0 ? `· R${item.cost_per_unit}/unit` : ""}
-                              </div>
+                              <div style={{ fontSize: 12, fontWeight: 500 }}>{item.item_name}</div>
+                              <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{item.supplier} {item.cost_per_unit > 0 ? `· R${item.cost_per_unit}/unit` : ""}</div>
                             </div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Qty: {item.quantity}</div>
-                            <div style={{
-                              fontSize: 10, padding: "2px 7px", borderRadius: 4,
-                              background: s.bg, color: s.text, fontWeight: 500
-                            }}>
-                              {s.label}
-                            </div>
+                            <div style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4, background: s.bg, color: s.text, fontWeight: 500 }}>{s.label}</div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
-
-                  {/* Approve button */}
                   <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
-                    <button
-                      onClick={approveReorders}
-                      disabled={selectedForReorder.size === 0 || approvalLoading}
-                      style={{
-                        flex: 1, padding: "11px", borderRadius: 10, border: "none",
-                        background: selectedForReorder.size > 0 ? "#a78bfa" : "var(--bg-2)",
-                        color: selectedForReorder.size > 0 ? "white" : "var(--text-tertiary)",
-                        fontSize: 13, fontWeight: 500, cursor: selectedForReorder.size > 0 ? "pointer" : "not-allowed",
-                        display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                        transition: "all 0.15s ease", opacity: approvalLoading ? 0.7 : 1
-                      }}
-                    >
+                    <button onClick={approveReorders} disabled={selectedForReorder.size === 0 || approvalLoading} style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: selectedForReorder.size > 0 ? "#a78bfa" : "var(--bg-2)", color: selectedForReorder.size > 0 ? "white" : "var(--text-tertiary)", fontSize: 13, fontWeight: 500, cursor: selectedForReorder.size > 0 ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, opacity: approvalLoading ? 0.7 : 1 }}>
                       <ShoppingCart size={13} />
-                      {approvalLoading ? "Saving..." : selectedForReorder.size > 0
-                        ? `Approve ${selectedForReorder.size} reorder${selectedForReorder.size !== 1 ? "s" : ""}`
-                        : "Select items to approve"}
+                      {approvalLoading ? "Saving..." : selectedForReorder.size > 0 ? `Approve ${selectedForReorder.size} reorder${selectedForReorder.size !== 1 ? "s" : ""}` : "Select items to approve"}
                     </button>
-                    <button onClick={() => setAgentDismissed(true)} style={{ ...btn(false), padding: "11px 16px" }}>
-                      Dismiss
-                    </button>
+                    <button onClick={() => setAgentDismissed(true)} style={{ ...btn(false), padding: "11px 16px" }}>Dismiss</button>
                   </div>
                 </>
               )}
@@ -404,7 +337,6 @@ export default function InventoryPage() {
           </div>
         )}
 
-        {/* Rescan button after dismissal */}
         {agentDismissed && (
           <button onClick={runInventoryAgent} disabled={agentRunning} style={{ ...btn(false), fontSize: 11 }}>
             <Bot size={11} /> {agentRunning ? "Scanning..." : "Run agent again"}
@@ -414,11 +346,10 @@ export default function InventoryPage() {
 
       {/* Mode buttons */}
       <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-        <button style={btn(mode === "view")} onClick={() => { setMode("view"); setResult(null); setImage(null); setStatus(""); }}><Package size={13} /> View Stock</button>
+        <button style={btn(mode === "view")} onClick={() => { setMode("view"); setResult(null); setImage(null); setStatus(""); setEditingId(null); }}><Package size={13} /> View Stock</button>
         <button style={btn(mode === "add-item", "#2dd4bf")} onClick={() => { setMode("add-item"); setStatus(""); }}><Plus size={13} /> Add Item</button>
         <button style={btn(mode === "receipt", "#60a5fa")} onClick={() => { setMode("receipt"); setResult(null); setImage(null); setStatus(""); }}><Camera size={13} /> Scan Receipt</button>
         <button style={btn(mode === "stocktake", "#a78bfa")} onClick={() => { setMode("stocktake"); setResult(null); setImage(null); setStatus(""); }}><Upload size={13} /> Stock Take</button>
-        <button style={btn(mode === "add-sale", "#fbbf24")} onClick={() => { setMode("add-sale"); setStatus(""); }}><Plus size={13} /> Log Sale</button>
       </div>
 
       {/* VIEW MODE */}
@@ -434,18 +365,68 @@ export default function InventoryPage() {
               {CATEGORIES.map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
-            {filtered.map((item, i) => (
-              <Card key={i} padding="16px">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, flex: 1, marginRight: 8 }}>{item.item_name}</div>
-                  <div style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4, flexShrink: 0, background: item.quantity === 0 ? "rgba(239,68,68,0.15)" : item.quantity <= 1 ? "rgba(251,191,36,0.15)" : "rgba(45,212,191,0.15)", color: item.quantity === 0 ? "#ef4444" : item.quantity <= 1 ? "#fbbf24" : "#2dd4bf" }}>
-                    {item.quantity === 0 ? "Out" : item.quantity <= 1 ? "Low" : "OK"}
+
+          {status && <div style={{ marginBottom: 12, fontSize: 12, color: "#2dd4bf" }}>{status}</div>}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {filtered.map((item) => (
+              <Card key={item.id} padding="14px 16px">
+                {editingId === item.id ? (
+                  <div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4 }}>Item name</div>
+                        <input value={editRow.item_name || ""} onChange={e => setEditRow((s: any) => ({ ...s, item_name: e.target.value }))} style={{ ...input, marginBottom: 0 }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4 }}>Quantity</div>
+                        <input value={editRow.quantity || ""} onChange={e => setEditRow((s: any) => ({ ...s, quantity: e.target.value }))} style={{ ...input, marginBottom: 0 }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4 }}>Cost per unit (R)</div>
+                        <input value={editRow.cost_per_unit || ""} onChange={e => setEditRow((s: any) => ({ ...s, cost_per_unit: e.target.value }))} style={{ ...input, marginBottom: 0 }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4 }}>Supplier</div>
+                        <input value={editRow.supplier || ""} onChange={e => setEditRow((s: any) => ({ ...s, supplier: e.target.value }))} style={{ ...input, marginBottom: 0 }} />
+                      </div>
+                    </div>
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 4 }}>Notes</div>
+                      <input value={editRow.notes || ""} onChange={e => setEditRow((s: any) => ({ ...s, notes: e.target.value }))} style={{ ...input, marginBottom: 0 }} />
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                      <button onClick={() => saveEdit(item.id)} style={{ ...btn(true, "#2dd4bf"), flex: 1, justifyContent: "center" }}>
+                        <CheckCircle size={13} /> Save
+                      </button>
+                      <button onClick={() => setEditingId(null)} style={{ ...btn(false), padding: "9px 16px" }}><X size={13} /></button>
+                    </div>
                   </div>
-                </div>
-                <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 6 }}>Qty: {item.quantity ?? "?"} · R{Number(item.total_cost || 0).toLocaleString()}</div>
-                {item.supplier && <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 2 }}>{item.supplier}</div>}
-                {item.notes && <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 4, fontStyle: "italic" }}>{item.notes}</div>}
+                ) : (
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, flex: 1, marginRight: 8 }}>{item.item_name}</div>
+                        <div style={{ fontSize: 10, padding: "2px 7px", borderRadius: 4, flexShrink: 0, background: item.quantity === 0 ? "rgba(239,68,68,0.15)" : item.quantity <= 1 ? "rgba(251,191,36,0.15)" : "rgba(45,212,191,0.15)", color: item.quantity === 0 ? "#ef4444" : item.quantity <= 1 ? "#fbbf24" : "#2dd4bf" }}>
+                          {item.quantity === 0 ? "Out" : item.quantity <= 1 ? "Low" : "OK"}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>
+                        Qty: {item.quantity ?? "?"} · R{Number(item.cost_per_unit || 0).toFixed(2)}/unit
+                      </div>
+                      {item.supplier && <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 2 }}>{item.supplier}</div>}
+                      {item.notes && <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 4, fontStyle: "italic" }}>{item.notes}</div>}
+                    </div>
+                    <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                      <button onClick={() => { setEditingId(item.id); setEditRow({ ...item }); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-tertiary)", padding: 6 }}>
+                        <Edit2 size={13} />
+                      </button>
+                      <button onClick={() => deleteItem(item.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#f87171", padding: 6 }}>
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </Card>
             ))}
           </div>
@@ -535,34 +516,7 @@ export default function InventoryPage() {
         </Card>
       )}
 
-      {/* LOG SALE MODE */}
-      {mode === "add-sale" && (
-        <Card padding="24px">
-          <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 20 }}>💰 Log a new sale</div>
-          {[
-            { label: "Customer name", key: "customer_name", placeholder: "e.g. Mathabelazitha" },
-            { label: "Products sold", key: "description", placeholder: "e.g. Hair oils, sprays and butters" },
-            { label: "Amount (R)", key: "amount", placeholder: "e.g. 1200" },
-          ].map(f => (
-            <div key={f.key}>
-              <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>{f.label}</div>
-              <input value={(sale as any)[f.key]} onChange={e => setSale(s => ({ ...s, [f.key]: e.target.value }))} placeholder={f.placeholder} style={input} />
-            </div>
-          ))}
-          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 6 }}>Payment method</div>
-          <select value={sale.payment_method} onChange={e => setSale(s => ({ ...s, payment_method: e.target.value }))} style={input}>
-            <option>EFT</option><option>Cash</option><option>Card</option>
-          </select>
-          <button onClick={logSale} disabled={loading} style={{ ...btn(true, "#fbbf24"), width: "100%", justifyContent: "center", padding: "12px" }}>
-            <Plus size={14} /> {loading ? "Saving..." : "Log Sale"}
-          </button>
-          {status && <div style={{ marginTop: 12, fontSize: 12, color: "#2dd4bf" }}>{status}</div>}
-        </Card>
-      )}
-
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
